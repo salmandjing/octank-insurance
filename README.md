@@ -136,8 +136,6 @@ The app has 4 screens (one visible at a time):
 
 ## Demo Walkthrough
 
-See **[demo-script.md](demo-script.md)** for a structured 10-minute walkthrough with narration cues and timing.
-
 ### Quick Version
 
 1. **Eligibility**: Select Sarah Chen → "What does my policy cover?" → watch trace panel show supervisor → routing → specialist → tools → RAG → guardrails
@@ -201,7 +199,6 @@ prototype/
 │   ├── index.html                 # All 4 screens (~800 lines)
 │   ├── app.js                     # All UI logic, state, WebSocket (~2200 lines, no framework)
 │   └── styles.css                 # Dark mode, Apple-inspired design (~3500 lines)
-├── demo-script.md                 # 10-minute structured demo walkthrough
 ├── requirements.txt               # 8 Python dependencies
 ├── .env.example
 └── start.sh                       # Creates venv, installs deps, runs uvicorn with hot-reload
