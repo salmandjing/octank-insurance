@@ -1,0 +1,68 @@
+{
+  "claims": {
+    "CLM-2024-001": {
+      "claim_id": "CLM-2024-001",
+      "member_id": "M-10043",
+      "policy_number": "POL-2024-78433",
+      "status": "under_review",
+      "type": "collision",
+      "filed_date": "2024-11-15",
+      "date_of_loss": "2024-11-14",
+      "description": "Rear-ended at a red light on Highway 26. Other driver ran into back of vehicle at approximately 25 mph.",
+      "location": "Highway 26 & Cedar Blvd, Portland, OR",
+      "injuries": false,
+      "police_report_number": "PPD-2024-44521",
+      "estimated_damage": 4200.00,
+      "adjuster": {
+        "name": "Patricia Martinez",
+        "phone": "555-800-1234",
+        "email": "p.martinez@octankinsurance.com"
+      },
+      "timeline": [
+        {"date": "2024-11-15", "event": "Claim filed", "status": "completed"},
+        {"date": "2024-11-16", "event": "Adjuster assigned", "status": "completed"},
+        {"date": "2024-11-18", "event": "Vehicle inspection scheduled", "status": "completed"},
+        {"date": "2024-11-20", "event": "Inspection completed - damage assessed at $4,200", "status": "completed"},
+        {"date": "2024-11-25", "event": "Liability determination in progress", "status": "in_progress"},
+        {"date": "2024-12-05", "event": "Expected resolution", "status": "pending"}
+      ],
+      "next_steps": [
+        "Liability determination is being finalized — the other driver's insurer has been contacted",
+        "Once liability is confirmed, repair authorization will be issued",
+        "You can take your vehicle to any approved repair shop in our network"
+      ]
+    },
+    "CLM-2024-002": {
+      "claim_id": "CLM-2024-002",
+      "member_id": "M-10044",
+      "policy_number": "POL-2024-78434",
+      "status": "approved",
+      "type": "comprehensive",
+      "filed_date": "2024-10-03",
+      "date_of_loss": "2024-10-01",
+      "description": "Hail damage to vehicle during severe storm. Multiple dents on hood, roof, and trunk. Windshield cracked.",
+      "location": "456 Maple Drive, Austin, TX",
+      "injuries": false,
+      "police_report_number": null,
+      "estimated_damage": 6800.00,
+      "approved_amount": 6550.00,
+      "adjuster": {
+        "name": "Robert Kim",
+        "phone": "555-800-5678",
+        "email": "r.kim@octankinsurance.com"
+      },
+      "timeline": [
+        {"date": "2024-10-03", "event": "Claim filed", "status": "completed"},
+        {"date": "2024-10-04", "event": "Adjuster assigned", "status": "completed"},
+        {"date": "2024-10-07", "event": "Vehicle inspection completed", "status": "completed"},
+        {"date": "2024-10-10", "event": "Claim approved - $6,550 authorized", "status": "completed"},
+        {"date": "2024-10-12", "event": "Payment issued to member", "status": "completed"}
+      ],
+      "next_steps": [
+        "Payment of $6,550 has been issued to your account",
+        "You may proceed with repairs at any shop of your choice",
+        "Submit final repair receipts for our records"
+      ]
+    }
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "members": {
+    "M-10042": {
+      "member_id": "M-10042",
+      "name": "Sarah Chen",
+      "policy_number": "POL-2024-78432",
+      "policy_type": "auto",
+      "email": "sarah.chen@email.com",
+      "phone": "555-123-4567",
+      "address": "742 Evergreen Terrace, Springfield, IL 62704",
+      "auth_status": "verified",
+      "effective_date": "2024-01-15",
+      "expiration_date": "2025-01-15",
+      "vehicles": [
+        {
+          "year": 2022,
+          "make": "Toyota",
+          "model": "Camry",
+          "vin": "1HGBH41JXMN109186"
+        }
+      ],
+      "coverage": {
+        "type": "Comprehensive + Collision",
+        "liability_limit": "$100,000/$300,000",
+        "deductible": 500,
+        "out_of_pocket_max": 5000,
+        "uninsured_motorist": true,
+        "rental_coverage": true,
+        "roadside_assistance": true
+      }
+    },
+    "M-10043": {
+      "member_id": "M-10043",
+      "name": "James Wilson",
+      "policy_number": "POL-2024-78433",
+      "policy_type": "auto",
+      "email": "james.wilson@email.com",
+      "phone": "555-987-6543",
+      "address": "123 Oak Street, Portland, OR 97201",
+      "auth_status": "verified",
+      "effective_date": "2024-03-01",
+      "expiration_date": "2025-03-01",
+      "vehicles": [
+        {
+          "year": 2021,
+          "make": "Honda",
+          "model": "Civic",
+          "vin": "2HGFC2F59MH567890"
+        }
+      ],
+      "coverage": {
+        "type": "Liability Only",
+        "liability_limit": "$50,000/$100,000",
+        "deductible": 1000,
+        "out_of_pocket_max": 8000,
+        "uninsured_motorist": false,
+        "rental_coverage": false,
+        "roadside_assistance": false
+      },
+      "claims": ["CLM-2024-001"]
+    },
+    "M-10044": {
+      "member_id": "M-10044",
+      "name": "Maria Rodriguez",
+      "policy_number": "POL-2024-78434",
+      "policy_type": "auto",
+      "email": "maria.rodriguez@email.com",
+      "phone": "555-456-7890",
+      "address": "456 Maple Drive, Austin, TX 78701",
+      "auth_status": "verified",
+      "effective_date": "2023-06-15",
+      "expiration_date": "2025-06-15",
+      "vehicles": [
+        {
+          "year": 2023,
+          "make": "Ford",
+          "model": "Escape",
+          "vin": "3FMCU9J94NRA12345"
+        }
+      ],
+      "coverage": {
+        "type": "Comprehensive + Collision",
+        "liability_limit": "$250,000/$500,000",
+        "deductible": 250,
+        "out_of_pocket_max": 3000,
+        "uninsured_motorist": true,
+        "rental_coverage": true,
+        "roadside_assistance": true
+      },
+      "claims": ["CLM-2024-002"]
+    }
+  }
+}

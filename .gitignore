@@ -1,0 +1,36 @@
+# Python
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+
+# Environment (keep .env.example, ignore actual .env)
+.env
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code
+.claude/
+
+# Old reference project
+old-project-for-refence/
+
+# Working/planning docs (not for public repo)
+prototype-spec.md
+discovery.md
+FEATURES.md

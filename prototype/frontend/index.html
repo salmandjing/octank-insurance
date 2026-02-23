@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Octank Insurance — Virtual Agent</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <meta name="theme-color" content="#000000">
+</head>
+<body>
+    <div id="app">
+        <!-- Auth Screen -->
+        <div id="auth-screen" class="screen active">
+            <div class="auth-container">
+                <div class="auth-logo">
+                    <div class="logo-icon">
+                        <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+                            <rect width="56" height="56" rx="14" fill="url(#logoGrad)"/>
+                            <defs><linearGradient id="logoGrad" x1="0" y1="0" x2="56" y2="56"><stop stop-color="#0A84FF"/><stop offset="1" stop-color="#5E5CE6"/></linearGradient></defs>
+                            <path d="M16 28C16 21.373 21.373 16 28 16C34.627 16 40 21.373 40 28C40 34.627 34.627 40 28 40" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+                            <path d="M28 40C21.373 40 16 34.627 16 28" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="4 4"/>
+                            <circle cx="28" cy="28" r="4.5" fill="white"/>
+                        </svg>
+                    </div>
+                    <h1>Octank Insurance</h1>
+                    <p class="auth-subtitle">Member Virtual Agent</p>
+                </div>
+                <div class="auth-form">
+                    <label for="member-select">Select Member</label>
+                    <select id="member-select">
+                        <option value="">Choose a member...</option>
+                    </select>
+                    <div id="member-preview" class="member-preview hidden"></div>
+                    <button id="start-btn" class="btn-primary" disabled>Start Conversation</button>
+                </div>
+                <p class="auth-note">Demo prototype — select a pre-configured member to begin</p>
+            </div>
+        </div>
+
+        <!-- Chat Screen -->
+        <div id="chat-screen" class="screen">
+            <!-- Header -->
+            <header class="chat-header">
+                <div class="header-left">
+                    <div class="logo-small">
+                        <svg width="28" height="28" viewBox="0 0 56 56" fill="none">
+                            <rect width="56" height="56" rx="14" fill="url(#logoGradSm)"/>
+                            <defs><linearGradient id="logoGradSm" x1="0" y1="0" x2="56" y2="56"><stop stop-color="#0A84FF"/><stop offset="1" stop-color="#5E5CE6"/></linearGradient></defs>
+                            <circle cx="28" cy="28" r="4.5" fill="white"/>
+                            <path d="M16 28C16 21.373 21.373 16 28 16C34.627 16 40 21.373 40 28C40 34.627 34.627 40 28 40" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <span class="header-title">Octank Insurance</span>
+                        <span class="header-status" id="agent-status">Virtual Agent</span>
+                    </div>
+                </div>
+                <div class="header-center">
+                    <div class="sentiment-indicator" id="sentiment-indicator">
+                        <span class="sentiment-dot" id="sentiment-dot"></span>
+                        <span class="sentiment-label" id="sentiment-label">Neutral</span>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <!-- Region Toggle -->
+                    <div class="region-toggle" id="region-toggle" title="Data residency region">
+                        <span class="region-flag" id="region-flag">US</span>
+                        <span class="region-label" id="region-label">us-east-1</span>
+                    </div>
+                    <!-- Latency Simulation Toggle -->
+                    <button id="latency-toggle" class="btn-ghost" title="Toggle latency simulation">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        Latency Sim
+                    </button>
+                    <button id="hood-toggle" class="btn-ghost" title="Toggle Under the Hood panel">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                        Under the Hood
+                    </button>
+                    <button id="analytics-btn" class="btn-ghost" title="Analytics Dashboard">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+                        Analytics
+                    </button>
+                    <button id="discovery-btn" class="btn-ghost" title="Discovery Mode — annotated view (D)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                        Discovery
+                    </button>
+                    <button id="arch-btn" class="btn-ghost" title="Production Architecture (G)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                        Architecture
+                    </button>
+                    <button id="escalate-btn" class="btn-danger-outline" title="Escalate to human agent">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                        Escalate
+                    </button>
+                    <button id="new-chat-btn" class="btn-ghost" title="New conversation">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        New
+                    </button>
+                </div>
+            </header>
+
+            <div class="chat-layout">
+                <!-- Left Sidebar -->
+                <aside class="sidebar" id="sidebar">
+                    <div class="sidebar-section">
+                        <h3>Member Info</h3>
+                        <div id="member-info" class="member-card"></div>
+                    </div>
+                    <div class="sidebar-section">
+                        <h3>Quick Actions</h3>
+                        <div class="quick-actions">
+                            <button class="quick-action-btn" data-message="What's my coverage and deductible?">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0 1 12 2.944a11.955 11.955 0 0 1-8.618 3.04A12.02 12.02 0 0 0 3 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                                Check Eligibility
+                            </button>
+                            <button class="quick-action-btn" data-message="I need to file a new claim — I was in an accident">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                                File a Claim
+                            </button>
+                            <button class="quick-action-btn" data-message="What's the status of my claim?">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                                Claim Status
+                            </button>
+                            <button class="quick-action-btn" data-message="I'd like to schedule a callback with an agent">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                Schedule Callback
+                            </button>
+                            <button class="quick-action-btn guardrail-demo-btn" data-message="What medication should I take for my neck pain from the accident?">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                                Guardrails Demo
+                            </button>
+                        </div>
+                    </div>
+                    <div class="sidebar-section">
+                        <h3>Escalation Threshold</h3>
+                        <div class="threshold-control">
+                            <input type="range" id="threshold-slider" min="30" max="95" value="70" class="threshold-slider">
+                            <div class="threshold-labels">
+                                <span>Auto-escalate below</span>
+                                <span id="threshold-value" class="threshold-value">70%</span>
+                            </div>
+                            <p class="threshold-hint">Confidence threshold for human review flagging</p>
+                        </div>
+                    </div>
+                    <div class="sidebar-section sidebar-session">
+                        <h3>Session</h3>
+                        <div class="session-stats">
+                            <div class="stat-row"><span>Turn</span><span id="stat-turn">0</span></div>
+                            <div class="stat-row"><span>Agent</span><span id="stat-agent">—</span></div>
+                            <div class="stat-row"><span>Session</span><span id="stat-session" class="mono-text">—</span></div>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- Chat Area (Center) -->
+                <main class="chat-main">
+                    <div class="messages-container" id="messages-container">
+                        <div id="messages" class="messages"></div>
+                    </div>
+
+                    <!-- Escalation Banner -->
+                    <div id="escalation-banner" class="escalation-banner hidden">
+                        <div class="escalation-content">
+                            <div class="escalation-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                            </div>
+                            <div class="escalation-text">
+                                <strong>Escalated to Human Agent</strong>
+                                <p id="escalation-detail">Routing via ACD · Queue: CLM-PRIORITY · Skills: claims-specialist</p>
+                            </div>
+                            <button id="view-agent-desktop-btn" class="btn-agent-desktop">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                                View Agent Desktop
+                            </button>
+                            <div class="escalation-meta" id="escalation-meta"></div>
+                        </div>
+                    </div>
+
+                    <!-- Input Area -->
+                    <div class="input-area" id="input-area">
+                        <div class="sentiment-ring" id="sentiment-ring" data-sentiment="neutral">
+                            <div class="input-wrapper">
+                                <button id="voice-mic-btn" class="voice-btn" title="Voice Input (simulated ASR)" onclick="toggleVoiceInput()">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                                </button>
+                                <textarea id="message-input" placeholder="Type your message..." rows="1" autofocus></textarea>
+                                <button id="send-btn" class="send-btn" disabled>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <p class="input-hint">Press Enter to send, Shift+Enter for new line · Mic for voice input</p>
+                    </div>
+                </main>
+
+                <!-- Right Panel: Under the Hood -->
+                <aside class="hood-panel" id="hood-panel">
+                    <div class="hood-header">
+                        <h2>Under the Hood</h2>
+                        <button class="hood-close" id="hood-close" title="Close panel">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                    </div>
+                    <div class="hood-tabs">
+                        <button class="hood-tab active" data-tab="trace">Agent Trace</button>
+                        <button class="hood-tab" data-tab="tools">Tools & APIs</button>
+                        <button class="hood-tab" data-tab="knowledge">Knowledge</button>
+                        <button class="hood-tab" data-tab="review">Review Queue</button>
+                        <button class="hood-tab" data-tab="compliance">Compliance</button>
+                        <button class="hood-tab" data-tab="session">Session</button>
+                    </div>
+                    <div class="hood-content">
+                        <!-- Agent Trace Tab -->
+                        <div class="hood-tab-content active" id="tab-trace">
+                            <div class="trace-empty" id="trace-empty">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                <p>Send a message to see the agent trace</p>
+                            </div>
+                            <div class="trace-timeline" id="trace-timeline"></div>
+                        </div>
+
+                        <!-- Tools & APIs Tab -->
+                        <div class="hood-tab-content" id="tab-tools">
+                            <div class="tools-empty" id="tools-empty">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                                <p>Tool calls will appear here</p>
+                            </div>
+                            <div class="tools-list" id="tools-list"></div>
+                        </div>
+
+                        <!-- Knowledge Tab -->
+                        <div class="hood-tab-content" id="tab-knowledge">
+                            <div class="knowledge-empty" id="knowledge-empty">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                                <p>RAG sources will appear here</p>
+                            </div>
+                            <div class="knowledge-list" id="knowledge-list"></div>
+                        </div>
+
+                        <!-- Review Queue Tab -->
+                        <div class="hood-tab-content" id="tab-review">
+                            <div class="review-queue-empty" id="review-queue-empty">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                <p>All responses passed confidence threshold</p>
+                                <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Responses with confidence &lt; 70% are flagged for human review</p>
+                            </div>
+                            <div class="review-queue-list" id="review-queue-list"></div>
+                        </div>
+
+                        <!-- Compliance Tab -->
+                        <div class="hood-tab-content" id="tab-compliance">
+                            <div class="compliance-content">
+                                <div class="compliance-section">
+                                    <div class="compliance-header">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                                        <span>Regulatory Framework</span>
+                                    </div>
+                                    <div class="compliance-items" id="compliance-items">
+                                        <div class="compliance-item active">
+                                            <span class="compliance-dot green"></span>
+                                            <div>
+                                                <strong>NAIC Model Bulletin</strong>
+                                                <p>AI-generated responses grounded in policy documents with source citations</p>
+                                            </div>
+                                        </div>
+                                        <div class="compliance-item active">
+                                            <span class="compliance-dot green"></span>
+                                            <div>
+                                                <strong>State DOI — Claim Acknowledgment</strong>
+                                                <p>FNOL confirmation within session per 10 CCR 2695.4 (15-day requirement)</p>
+                                            </div>
+                                        </div>
+                                        <div class="compliance-item" id="compliance-hipaa">
+                                            <span class="compliance-dot gray"></span>
+                                            <div>
+                                                <strong>HIPAA — Protected Health Info</strong>
+                                                <p>Activated when medical/injury information is disclosed</p>
+                                            </div>
+                                        </div>
+                                        <div class="compliance-item active">
+                                            <span class="compliance-dot green"></span>
+                                            <div>
+                                                <strong>FCRA — Claims Data Access</strong>
+                                                <p>Claims data served via authorized member lookup only</p>
+                                            </div>
+                                        </div>
+                                        <div class="compliance-item active">
+                                            <span class="compliance-dot green"></span>
+                                            <div>
+                                                <strong>E&O — Errors & Omissions</strong>
+                                                <p>Full audit trail with timestamped decisions for liability protection</p>
+                                            </div>
+                                        </div>
+                                        <div class="compliance-item active">
+                                            <span class="compliance-dot green"></span>
+                                            <div>
+                                                <strong>Bias & Fairness — NAIC §5.C</strong>
+                                                <p>Responses grounded in policy documents only — no demographic-based decisioning. Coverage answers identical regardless of member profile.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="compliance-section">
+                                    <div class="compliance-header">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                        <span>Data Residency</span>
+                                    </div>
+                                    <div class="compliance-region" id="compliance-region">
+                                        <div class="compliance-item active">
+                                            <span class="compliance-dot blue"></span>
+                                            <div>
+                                                <strong id="compliance-region-label">US — us-east-1</strong>
+                                                <p id="compliance-region-detail">Data processed and stored in AWS US East region. SOC 2 Type II compliant.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="compliance-section">
+                                    <div class="compliance-header">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                        <span>Session Flags</span>
+                                    </div>
+                                    <div class="compliance-flags" id="compliance-flags">
+                                        <div class="compliance-flag-empty">No compliance flags triggered this session</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Session Tab -->
+                        <div class="hood-tab-content" id="tab-session">
+                            <div class="session-info">
+                                <h4>Guardrails</h4>
+                                <div class="guardrail-status">
+                                    <div class="guardrail-item active">
+                                        <span class="guardrail-dot"></span>
+                                        PII Redaction
+                                    </div>
+                                    <div class="guardrail-item active">
+                                        <span class="guardrail-dot"></span>
+                                        Topic Blocking
+                                    </div>
+                                    <div class="guardrail-item active">
+                                        <span class="guardrail-dot"></span>
+                                        Response Validation
+                                    </div>
+                                </div>
+
+                                <h4>Architecture</h4>
+                                <div class="arch-info">
+                                    <div class="arch-row"><span>Supervisor</span><span class="mono-text">Claude 3.5 Haiku</span></div>
+                                    <div class="arch-row"><span>Specialists</span><span class="mono-text">Claude 3.5 Sonnet</span></div>
+                                    <div class="arch-row"><span>RAG</span><span class="mono-text">TF-IDF + Cosine</span></div>
+                                    <div class="arch-row"><span>Runtime</span><span class="mono-text">AWS Bedrock</span></div>
+                                </div>
+
+                                <h4>Audit Log</h4>
+                                <div class="audit-log" id="audit-log">
+                                    <p class="audit-empty">No entries yet</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+        <!-- Agent Desktop Screen -->
+        <div id="agent-desktop-screen" class="screen">
+            <!-- Agent Header -->
+            <header class="agent-header">
+                <div class="agent-header-left">
+                    <div class="agent-header-badge">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                        <span>Agent Desktop</span>
+                    </div>
+                    <div class="agent-queue-badge">
+                        <span class="queue-dot"></span>
+                        INBOUND
+                    </div>
+                    <div class="agent-handle-timer" id="agent-handle-timer">00:00</div>
+                </div>
+                <div class="agent-header-right">
+                    <button id="agent-accept-btn" class="btn-accept">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                        Accept
+                    </button>
+                    <button id="back-to-demo-btn" class="btn-ghost">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                        Back to Demo
+                    </button>
+                    <button id="agent-new-btn" class="btn-ghost" title="New conversation">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        New
+                    </button>
+                </div>
+            </header>
+
+            <!-- AI Summary Banner -->
+            <div class="ai-summary-banner" id="ai-summary-banner">
+                <div class="ai-summary-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.58-3.25 3.93L12 22l-.75-12.07A4.001 4.001 0 0 1 12 2z"/><circle cx="12" cy="6" r="1"/></svg>
+                    <span>AI Briefing</span>
+                </div>
+                <p class="ai-summary-text" id="ai-summary-text">Loading AI summary...</p>
+                <button class="ai-summary-dismiss" id="ai-summary-dismiss" title="Dismiss">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+
+            <!-- 4-Panel Layout -->
+            <div class="agent-panels">
+                <!-- Panel 1: Screen Pop -->
+                <div class="agent-panel panel-screen-pop" id="panel-screen-pop">
+                    <div class="panel-header">
+                        <h3>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            Screen Pop
+                        </h3>
+                        <span class="panel-badge badge-crm">CRM</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="screen-pop-member" id="screen-pop-member"></div>
+                        <div class="screen-pop-section">
+                            <h4>Sentiment Timeline</h4>
+                            <div class="sentiment-timeline" id="sentiment-timeline"></div>
+                        </div>
+                        <div class="screen-pop-section">
+                            <h4>AI Actions Taken</h4>
+                            <div class="actions-taken-list" id="actions-taken-list"></div>
+                        </div>
+                        <div class="screen-pop-section">
+                            <h4>Session Info</h4>
+                            <div class="agent-session-info" id="agent-session-info"></div>
+                        </div>
+                        <div class="screen-pop-section">
+                            <h4 class="context-payload-toggle" id="context-payload-toggle">
+                                Handoff Payload
+                                <svg class="context-payload-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                            </h4>
+                            <div class="context-payload-body hidden" id="context-payload-body">
+                                <div class="context-payload-note">JSON sent as Genesys conversation attributes during transferToAcd</div>
+                                <pre class="context-payload-json" id="context-payload-json"></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel 2: Transcript -->
+                <div class="agent-panel panel-transcript" id="panel-transcript">
+                    <div class="panel-header">
+                        <h3>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            Conversation Transcript
+                        </h3>
+                        <span class="panel-badge badge-turn" id="transcript-turn-badge">0 turns</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="transcript-messages" id="transcript-messages"></div>
+                        <div class="transcript-input-area">
+                            <textarea id="agent-reply-input" placeholder="Type a reply as the agent..." rows="2"></textarea>
+                            <button id="agent-reply-btn" class="btn-primary btn-sm">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                                Send
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel 3: Knowledge -->
+                <div class="agent-panel panel-knowledge" id="panel-knowledge">
+                    <div class="panel-header">
+                        <h3>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                            Knowledge
+                        </h3>
+                        <span class="panel-badge badge-rag">RAG</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="knowledge-tabs">
+                            <button class="knowledge-tab active" data-ktab="retrieved">Retrieved</button>
+                            <button class="knowledge-tab" data-ktab="proactive">Suggested</button>
+                        </div>
+                        <div class="knowledge-tab-content active" id="ktab-retrieved">
+                            <div class="knowledge-cards" id="knowledge-retrieved-cards"></div>
+                        </div>
+                        <div class="knowledge-tab-content" id="ktab-proactive">
+                            <div class="knowledge-cards" id="knowledge-proactive-cards"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel 4: Agent Assist -->
+                <div class="agent-panel panel-assist" id="panel-assist">
+                    <div class="panel-header">
+                        <h3>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.58-3.25 3.93L12 22l-.75-12.07A4.001 4.001 0 0 1 12 2z"/><circle cx="12" cy="6" r="1"/></svg>
+                            Agent Assist
+                        </h3>
+                        <span class="panel-badge badge-ai">AI</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="assist-section">
+                            <h4>Open Questions</h4>
+                            <ul class="open-questions-list" id="open-questions-list"></ul>
+                        </div>
+                        <div class="assist-section">
+                            <h4>Suggested Actions</h4>
+                            <div class="suggested-actions-list" id="suggested-actions-list"></div>
+                        </div>
+                        <div class="assist-section">
+                            <h4>Escalation Details</h4>
+                            <div class="escalation-details" id="escalation-details"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Screen -->
+        <div id="analytics-screen" class="screen">
+            <header class="analytics-header">
+                <div class="agent-header-left">
+                    <div class="agent-header-badge">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+                        <span>Conversation Analytics</span>
+                    </div>
+                    <div class="analytics-period-badge">Last 30 days</div>
+                </div>
+                <div class="agent-header-right">
+                    <button id="analytics-back-btn" class="btn-ghost">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                        Back to Demo
+                    </button>
+                </div>
+            </header>
+
+            <!-- KPI Cards -->
+            <div class="analytics-body">
+                <div class="kpi-row" id="kpi-row"></div>
+
+                <!-- Charts Grid -->
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <div class="chart-title">Intent Distribution</div>
+                        <div class="chart-body" id="chart-intent"></div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-title">Daily Volume</div>
+                        <div class="chart-body" id="chart-daily"></div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-title">Escalation Reasons</div>
+                        <div class="chart-body" id="chart-escalation"></div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-title">Sentiment Distribution</div>
+                        <div class="chart-body" id="chart-sentiment"></div>
+                    </div>
+                </div>
+
+                <!-- Wide charts -->
+                <div class="charts-wide">
+                    <div class="chart-card wide">
+                        <div class="chart-title">Tool Call Frequency</div>
+                        <div class="chart-body" id="chart-tools"></div>
+                    </div>
+                    <div class="chart-card wide">
+                        <div class="chart-title">Avg Handle Time by Intent</div>
+                        <div class="chart-body" id="chart-handle-time"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Genesys Architecture Modal -->
+        <div id="arch-overlay" class="doc-viewer-overlay hidden">
+            <div class="doc-viewer arch-modal">
+                <div class="doc-viewer-header">
+                    <div class="doc-viewer-title">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                        <span>Production Architecture — Genesys Cloud CX Integration</span>
+                    </div>
+                    <div class="doc-viewer-actions">
+                        <span class="doc-viewer-badge" style="background: var(--purple-soft); color: var(--purple);">Architecture</span>
+                        <button class="doc-viewer-close" id="arch-close" title="Close (Esc)">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="doc-viewer-body arch-body">
+                    <div class="arch-section">
+                        <h2>From Prototype to Production</h2>
+                        <p class="arch-subtitle">This prototype maps directly to Genesys Cloud CX primitives. Every component has a production equivalent.</p>
+                    </div>
+
+                    <div class="arch-diagram">
+                        <div class="arch-col">
+                            <div class="arch-col-header proto">This Prototype</div>
+                            <div class="arch-node proto">
+                                <div class="arch-node-title">FastAPI Backend</div>
+                                <div class="arch-node-desc">Session mgmt, agent routing, tool execution</div>
+                            </div>
+                            <div class="arch-arrow">becomes</div>
+                            <div class="arch-node proto">
+                                <div class="arch-node-title">Supervisor Agent (Haiku)</div>
+                                <div class="arch-node-desc">Intent classification + sentiment + routing</div>
+                            </div>
+                            <div class="arch-arrow">becomes</div>
+                            <div class="arch-node proto">
+                                <div class="arch-node-title">Specialist Agents (Sonnet)</div>
+                                <div class="arch-node-desc">Agentic tool loop, 5 iterations max</div>
+                            </div>
+                            <div class="arch-arrow">becomes</div>
+                            <div class="arch-node proto">
+                                <div class="arch-node-title">Mock Tool APIs</div>
+                                <div class="arch-node-desc">Hardcoded eligibility, claims, FNOL data</div>
+                            </div>
+                            <div class="arch-arrow">becomes</div>
+                            <div class="arch-node proto">
+                                <div class="arch-node-title">TF-IDF RAG</div>
+                                <div class="arch-node-desc">scikit-learn vectorization, 30 chunks</div>
+                            </div>
+                            <div class="arch-arrow">becomes</div>
+                            <div class="arch-node proto">
+                                <div class="arch-node-title">escalate_to_human()</div>
+                                <div class="arch-node-desc">Sets session.escalated = True</div>
+                            </div>
+                            <div class="arch-arrow">becomes</div>
+                            <div class="arch-node proto">
+                                <div class="arch-node-title">Agent Desktop (HTML)</div>
+                                <div class="arch-node-desc">4-panel layout with AI summary + knowledge</div>
+                            </div>
+                        </div>
+
+                        <div class="arch-col">
+                            <div class="arch-col-header prod">Genesys Cloud CX</div>
+                            <div class="arch-node prod">
+                                <div class="arch-node-title">Bot Connector API</div>
+                                <div class="arch-node-desc">Webhook endpoint in Genesys Bot Flow</div>
+                            </div>
+                            <div class="arch-arrow">&nbsp;</div>
+                            <div class="arch-node prod">
+                                <div class="arch-node-title">Architect Bot Flow</div>
+                                <div class="arch-node-desc">NLU slot filling + Bedrock Agent routing</div>
+                            </div>
+                            <div class="arch-arrow">&nbsp;</div>
+                            <div class="arch-node prod">
+                                <div class="arch-node-title">Bedrock Agents</div>
+                                <div class="arch-node-desc">Managed agent with action groups + guardrails</div>
+                            </div>
+                            <div class="arch-arrow">&nbsp;</div>
+                            <div class="arch-node prod">
+                                <div class="arch-node-title">Genesys Data Actions</div>
+                                <div class="arch-node-desc">REST integrations to policy admin, claims FNOL</div>
+                            </div>
+                            <div class="arch-arrow">&nbsp;</div>
+                            <div class="arch-node prod">
+                                <div class="arch-node-title">Bedrock Knowledge Bases</div>
+                                <div class="arch-node-desc">Managed vector store + embeddings, auto-sync</div>
+                            </div>
+                            <div class="arch-arrow">&nbsp;</div>
+                            <div class="arch-node prod">
+                                <div class="arch-node-title">transferToAcd Action</div>
+                                <div class="arch-node-desc">Skills-based routing via Genesys ACD queues</div>
+                            </div>
+                            <div class="arch-arrow">&nbsp;</div>
+                            <div class="arch-node prod">
+                                <div class="arch-node-title">Genesys Agent Workspace</div>
+                                <div class="arch-node-desc">Screen pop via Data Actions + script widget</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="arch-section">
+                        <h3>Key Integration Points</h3>
+                        <div class="arch-integrations">
+                            <div class="arch-integration">
+                                <span class="arch-int-badge voice">Voice</span>
+                                <div>
+                                    <strong>Genesys Architect IVR</strong>
+                                    <p>ASR (speech-to-text) feeds into the same LLM pipeline. TTS renders responses. The latency waterfall in this prototype simulates exactly this flow.</p>
+                                </div>
+                            </div>
+                            <div class="arch-integration">
+                                <span class="arch-int-badge digital">Digital</span>
+                                <div>
+                                    <strong>Web Messaging / Open Messaging</strong>
+                                    <p>This chat UI maps to Genesys Web Messenger. The Bot Connector API receives messages and returns responses through the same agent loop.</p>
+                                </div>
+                            </div>
+                            <div class="arch-integration">
+                                <span class="arch-int-badge wem">WEM</span>
+                                <div>
+                                    <strong>Workforce Engagement</strong>
+                                    <p>Sentiment signals feed into Genesys Quality Management scoring. The sentiment timeline in our Agent Desktop maps to Genesys Predictive Engagement journey analytics.</p>
+                                </div>
+                            </div>
+                            <div class="arch-integration">
+                                <span class="arch-int-badge routing">Routing</span>
+                                <div>
+                                    <strong>ACD + Skills-Based Routing</strong>
+                                    <p>On escalation: route to <code>CLM-PRIORITY</code> queue with skills <code>claims-specialist</code>, <code>spanish-language</code>. Conversation attributes carry full AI context.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="arch-section">
+                        <h3>Resilience & Failure Modes</h3>
+                        <div class="arch-failure-grid">
+                            <div class="arch-failure-card">
+                                <div class="arch-failure-icon danger">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                </div>
+                                <strong>LLM Timeout / Error</strong>
+                                <p>Bedrock returns 5xx or times out. Circuit breaker trips after 3 failures. Fallback: pre-written safe responses per intent + immediate escalation offer.</p>
+                            </div>
+                            <div class="arch-failure-card">
+                                <div class="arch-failure-icon warning">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                </div>
+                                <strong>RAG Returns No Results</strong>
+                                <p>Knowledge base query scores below 0.15 threshold. Agent acknowledges limitation honestly + offers callback to specialist. Logged for KB gap analysis.</p>
+                            </div>
+                            <div class="arch-failure-card">
+                                <div class="arch-failure-icon warning">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                                </div>
+                                <strong>Guardrail False Positive</strong>
+                                <p>Topic blocker flags a legitimate insurance question. Fallback: graceful redirect ("Let me rephrase...") + flagged for human review queue. No dead-end responses.</p>
+                            </div>
+                            <div class="arch-failure-card">
+                                <div class="arch-failure-icon accent">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                                </div>
+                                <strong>Data Action Failure</strong>
+                                <p>Policy admin or claims system returns error. Retry with exponential backoff (3 attempts). Fallback: "I can't access your records right now" + schedule callback.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="arch-section">
+                        <h3>Cost at Scale</h3>
+                        <div class="arch-cost-grid">
+                            <div class="arch-cost-card">
+                                <div class="arch-cost-label">Haiku Classification</div>
+                                <div class="arch-cost-value">~$0.001</div>
+                                <div class="arch-cost-unit">per message</div>
+                            </div>
+                            <div class="arch-cost-card">
+                                <div class="arch-cost-label">Sonnet Reasoning</div>
+                                <div class="arch-cost-value">~$0.02</div>
+                                <div class="arch-cost-unit">per response</div>
+                            </div>
+                            <div class="arch-cost-card">
+                                <div class="arch-cost-label">10K conversations/day</div>
+                                <div class="arch-cost-value">~$210</div>
+                                <div class="arch-cost-unit">daily LLM cost</div>
+                            </div>
+                            <div class="arch-cost-card">
+                                <div class="arch-cost-label">Bedrock Knowledge Base</div>
+                                <div class="arch-cost-value">~$25</div>
+                                <div class="arch-cost-unit">monthly (managed)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Document Viewer Overlay -->
+        <div id="doc-viewer-overlay" class="doc-viewer-overlay hidden">
+            <div class="doc-viewer">
+                <div class="doc-viewer-header">
+                    <div class="doc-viewer-title">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        <span id="doc-viewer-name">document.md</span>
+                    </div>
+                    <div class="doc-viewer-actions">
+                        <span class="doc-viewer-badge" id="doc-viewer-badge">RAG Source</span>
+                        <button class="doc-viewer-close" id="doc-viewer-close" title="Close">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="doc-viewer-body" id="doc-viewer-body">
+                    <div class="doc-viewer-loading">Loading document...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
