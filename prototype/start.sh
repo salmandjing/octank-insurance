@@ -1,5 +1,5 @@
 #!/bin/bash
-# Octank Insurance Virtual Agent — Start Script
+# ClaimFlow AI — Start Script
 
 set -e
 
@@ -12,9 +12,9 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-echo -e "${BLUE}╔══════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║  Octank Insurance — Virtual Agent Prototype  ║${NC}"
-echo -e "${BLUE}╚══════════════════════════════════════════════╝${NC}"
+echo -e "${BLUE}╔════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║  ClaimFlow AI — FNOL Automation for Agencies   ║${NC}"
+echo -e "${BLUE}╚════════════════════════════════════════════════╝${NC}"
 echo ""
 
 # Check for .env
@@ -22,16 +22,20 @@ if [ ! -f .env ]; then
     if [ -f .env.example ]; then
         echo -e "${YELLOW}No .env file found. Copying from .env.example...${NC}"
         cp .env.example .env
+        echo -e "${YELLOW}Edit .env and add your ANTHROPIC_API_KEY${NC}"
     fi
 fi
 
-# Check AWS credentials
-if ! aws sts get-caller-identity &> /dev/null; then
-    echo -e "${YELLOW}Warning: AWS credentials not configured${NC}"
-    echo "Run 'aws configure' or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY"
+# Check Anthropic API key
+if [ -f .env ]; then
+    source .env
+fi
+if [ -z "$ANTHROPIC_API_KEY" ] || [ "$ANTHROPIC_API_KEY" = "sk-ant-..." ]; then
+    echo -e "${YELLOW}Warning: ANTHROPIC_API_KEY not set${NC}"
+    echo "Add your key to .env: ANTHROPIC_API_KEY=sk-ant-api03-..."
     exit 1
 fi
-echo -e "${GREEN}AWS credentials verified ✓${NC}"
+echo -e "${GREEN}Anthropic API key configured${NC}"
 
 # Check Python
 if ! command -v python3 &> /dev/null; then
@@ -40,22 +44,22 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 # Create venv if needed
-if [ ! -d "venv" ]; then
+if [ ! -d ".venv" ]; then
     echo -e "${GREEN}Creating virtual environment...${NC}"
-    python3 -m venv venv
+    python3 -m venv .venv
 fi
 
 # Activate venv
-source venv/bin/activate
+source .venv/bin/activate
 
 # Install dependencies
 echo -e "${GREEN}Installing dependencies...${NC}"
 pip install -q -r requirements.txt
 
 echo ""
-echo -e "${GREEN}Starting server on http://localhost:8000${NC}"
+echo -e "${GREEN}Starting ClaimFlow AI on http://localhost:${PORT:-8000}${NC}"
 echo -e "${GREEN}Press Ctrl+C to stop${NC}"
 echo ""
 
 # Start server
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn backend.main:app --host ${HOST:-0.0.0.0} --port ${PORT:-8000} --reload

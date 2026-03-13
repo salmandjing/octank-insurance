@@ -5,20 +5,76 @@ from enum import Enum
 
 
 class Intent(str, Enum):
-    ELIGIBILITY = "eligibility"
-    FNOL = "fnol"
+    FNOL_AUTO = "fnol_auto"
+    FNOL_PROPERTY = "fnol_property"
+    FNOL_FARM = "fnol_farm"
+    FNOL_COMMERCIAL = "fnol_commercial"
+    FNOL_WORKERS_COMP = "fnol_workers_comp"
     CLAIM_STATUS = "claim_status"
+    POLICY_QUESTION = "policy_question"
+    COI_REQUEST = "coi_request"
+    BILLING_QUESTION = "billing_question"
     GENERAL = "general"
     ESCALATE = "escalate"
+
+
+# All FNOL intents for routing convenience
+FNOL_INTENTS = {
+    Intent.FNOL_AUTO, Intent.FNOL_PROPERTY, Intent.FNOL_FARM,
+    Intent.FNOL_COMMERCIAL, Intent.FNOL_WORKERS_COMP,
+}
+
+
+class Priority(str, Enum):
+    CRITICAL = "critical"
+    HIGH = "high"
+    ELEVATED = "elevated"
+    NORMAL = "normal"
+
+
+class ClaimStatus(str, Enum):
+    NEW = "new"
+    PROCESSING = "processing"
+    NEEDS_REVIEW = "needs_review"
+    APPROVED = "approved"
+    SUBMITTED = "submitted"
+    FOLLOW_UP = "follow_up"
+    DRAFT = "draft"
+
+
+@dataclass
+class FNOLExtraction:
+    """Structured data extracted from an incoming claim email."""
+    reporter_name: str = ""
+    reporter_email: str | None = None
+    reporter_phone: str | None = None
+    client_name: str | None = None
+    policy_number: str | None = None
+    date_of_loss: str | None = None
+    time_of_loss: str | None = None
+    location: str | None = None
+    loss_type: str | None = None
+    description: str = ""
+    injuries: bool | None = None
+    injury_description: str | None = None
+    police_report: bool | None = None
+    police_report_number: str | None = None
+    other_parties: list[dict] | None = None
+    photos_mentioned: bool = False
+    attachments: list[str] = field(default_factory=list)
+    urgency: str = "normal"
+    missing_fields: list[str] = field(default_factory=list)
+    confidence_score: float = 0.0
+    raw_email_text: str = ""
 
 
 @dataclass
 class TraceStep:
     """A single step in the agent processing trace."""
     name: str
-    step_type: str  # "supervisor", "routing", "tool_call", "rag_search", "specialist", "guardrail", "escalation"
+    step_type: str
     duration_ms: int = 0
-    status: str = "success"  # "success", "error", "skipped"
+    status: str = "success"
     details: dict[str, Any] = field(default_factory=dict)
 
 
@@ -68,7 +124,7 @@ class AgentResponse:
 
 @dataclass
 class Message:
-    role: str  # "user" or "assistant"
+    role: str
     content: str
     metadata: dict[str, Any] = field(default_factory=dict)
 

@@ -1,130 +1,104 @@
 """Base agent with agentic tool-use loop.
 
-Handles the core pattern: send message → Claude responds → execute tools → repeat.
-Uses AWS Bedrock for Claude access.
+Handles the core pattern: send message -> Claude responds -> execute tools -> repeat.
+Uses the Anthropic API directly (ANTHROPIC_API_KEY env var).
 """
 from __future__ import annotations
 import json
 import time
 import logging
 from typing import Any
-from anthropic import AnthropicBedrock
+import anthropic
 
-from backend.config import AWS_REGION, SPECIALIST_MODEL_ID, MAX_TOKENS, TEMPERATURE, MAX_AGENT_STEPS
+from backend.config import SPECIALIST_MODEL, MAX_TOKENS, TEMPERATURE, MAX_AGENT_STEPS
 from backend.models import AgentResponse, ToolCall, RAGSource, TraceStep, Intent
 
 logger = logging.getLogger(__name__)
 
-client = AnthropicBedrock(aws_region=AWS_REGION)
+client = anthropic.Anthropic()
 
 
 # Tool definitions shared across agents
 TOOL_DEFINITIONS = {
-    "get_eligibility": {
-        "name": "get_eligibility",
-        "description": "Retrieve eligibility and coverage details for the authenticated member. Returns coverage type, deductible, limits, and benefits.",
+    "lookup_policy": {
+        "name": "lookup_policy",
+        "description": "Look up a policy by number or ID. Returns full policy details including coverage, carrier, status, effective dates, and client info.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "member_id": {
-                    "type": "string",
-                    "description": "The member ID to look up"
-                }
+                "policy_number": {"type": "string", "description": "The policy number to look up"}
             },
-            "required": ["member_id"]
+            "required": ["policy_number"]
+        }
+    },
+    "lookup_client": {
+        "name": "lookup_client",
+        "description": "Look up a client by name (fuzzy match). Returns client details and all associated policies.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "client_name": {"type": "string", "description": "The client name to search for"}
+            },
+            "required": ["client_name"]
+        }
+    },
+    "verify_coverage": {
+        "name": "verify_coverage",
+        "description": "Verify that a specific loss type is potentially covered under a policy as of the date of loss.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "policy_id": {"type": "string", "description": "The policy ID"},
+                "date_of_loss": {"type": "string", "description": "Date of loss (YYYY-MM-DD)"},
+                "loss_type": {"type": "string", "description": "Type of loss (collision, comprehensive, property, wind, hail, fire, theft, liability, etc.)"}
+            },
+            "required": ["policy_id", "date_of_loss", "loss_type"]
+        }
+    },
+    "get_carrier_requirements": {
+        "name": "get_carrier_requirements",
+        "description": "Get the FNOL requirements for a specific carrier.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "carrier_id": {"type": "string", "description": "The carrier ID"}
+            },
+            "required": ["carrier_id"]
         }
     },
     "get_claim_status": {
         "name": "get_claim_status",
-        "description": "Retrieve claim status, timeline, and next steps. If no claim_id provided, returns all recent claims for the member.",
+        "description": "Retrieve claim status, timeline, and next steps for a client.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "member_id": {
-                    "type": "string",
-                    "description": "The member ID"
-                },
-                "claim_id": {
-                    "type": "string",
-                    "description": "Optional specific claim ID. If omitted, returns all claims for the member."
-                }
+                "client_id": {"type": "string", "description": "The client ID"},
+                "claim_id": {"type": "string", "description": "Optional specific claim ID"}
             },
-            "required": ["member_id"]
-        }
-    },
-    "create_fnol": {
-        "name": "create_fnol",
-        "description": "File a First Notice of Loss (FNOL) claim. IMPORTANT: Only call this AFTER the member has explicitly confirmed they want to file. Present a summary of collected information and ask for confirmation first.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "member_id": {"type": "string", "description": "The member ID"},
-                "date_of_loss": {"type": "string", "description": "Date of the incident (YYYY-MM-DD)"},
-                "description": {"type": "string", "description": "Description of what happened"},
-                "location": {"type": "string", "description": "Location of the incident"},
-                "injuries": {"type": "boolean", "description": "Whether anyone was injured"},
-                "injury_description": {"type": "string", "description": "Description of injuries if any"},
-                "police_report_number": {"type": "string", "description": "Police report number if filed"}
-            },
-            "required": ["member_id", "date_of_loss", "description"]
+            "required": ["client_id"]
         }
     },
     "search_knowledge_base": {
         "name": "search_knowledge_base",
-        "description": "Search Octank Insurance policy documents and knowledge base. Use this to find information about coverage details, procedures, deductibles, filing requirements, and policy terms.",
+        "description": "Search Prairie Shield's policy documents and knowledge base for procedures, coverage info, and regulations.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Search query describing what information is needed"
-                }
+                "query": {"type": "string", "description": "Search query"}
             },
             "required": ["query"]
         }
     },
     "escalate_to_human": {
         "name": "escalate_to_human",
-        "description": "Escalate the conversation to a human claims specialist. Use when: the member explicitly asks for a human, the issue involves injuries/fatality, sentiment is very negative, or you cannot resolve the issue.",
+        "description": "Escalate the conversation to a human CSR or agency principal.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "reason": {
-                    "type": "string",
-                    "description": "Reason for escalation"
-                },
-                "conversation_summary": {
-                    "type": "string",
-                    "description": "Brief summary of the conversation so far for the human agent"
-                }
+                "reason": {"type": "string", "description": "Reason for escalation"},
+                "conversation_summary": {"type": "string", "description": "Brief summary of the conversation"}
             },
             "required": ["reason", "conversation_summary"]
-        }
-    },
-    "schedule_callback": {
-        "name": "schedule_callback",
-        "description": "Schedule a callback from a human agent. Use when the member wants to be called back rather than wait on hold, or when they need to speak with someone but not urgently.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "member_id": {
-                    "type": "string",
-                    "description": "The member ID"
-                },
-                "preferred_time": {
-                    "type": "string",
-                    "description": "Member's preferred callback time (e.g. 'tomorrow morning', '2pm today')"
-                },
-                "phone_number": {
-                    "type": "string",
-                    "description": "Phone number to call back on. If not provided, uses number on file."
-                },
-                "reason": {
-                    "type": "string",
-                    "description": "Brief reason for the callback request"
-                }
-            },
-            "required": ["member_id"]
         }
     }
 }
@@ -133,17 +107,19 @@ TOOL_DEFINITIONS = {
 # Tool executors
 def _execute_tool(tool_name: str, tool_input: dict) -> dict:
     """Execute a tool and return the result."""
-    from backend.tools.eligibility_api import get_eligibility
-    from backend.tools.claims_api import get_claim_status, create_fnol, escalate_to_human, schedule_callback
+    from backend.tools.ams_api import lookup_policy, lookup_client, verify_coverage
+    from backend.tools.carrier_api import get_carrier_requirements
+    from backend.tools.claims_api import get_claim_status, escalate_to_human
     from backend.tools.knowledge_base import search_knowledge_base
 
     executors = {
-        "get_eligibility": lambda args: get_eligibility(**args),
+        "lookup_policy": lambda args: lookup_policy(**args),
+        "lookup_client": lambda args: lookup_client(**args),
+        "verify_coverage": lambda args: verify_coverage(**args),
+        "get_carrier_requirements": lambda args: get_carrier_requirements(**args),
         "get_claim_status": lambda args: get_claim_status(**args),
-        "create_fnol": lambda args: create_fnol(**args),
         "search_knowledge_base": lambda args: search_knowledge_base(**args),
         "escalate_to_human": lambda args: escalate_to_human(**args),
-        "schedule_callback": lambda args: schedule_callback(**args),
     }
 
     executor = executors.get(tool_name)
@@ -181,7 +157,7 @@ def run_agent_loop(
     trace_steps.append(TraceStep(
         name=f"{agent_name} started",
         step_type="specialist",
-        details={"model": SPECIALIST_MODEL_ID, "tools_available": [t["name"] for t in tools]},
+        details={"model": SPECIALIST_MODEL, "tools_available": [t["name"] for t in tools]},
     ))
 
     for step in range(MAX_AGENT_STEPS):
@@ -189,7 +165,7 @@ def run_agent_loop(
         llm_start = time.time()
 
         response = client.messages.create(
-            model=SPECIALIST_MODEL_ID,
+            model=SPECIALIST_MODEL,
             max_tokens=MAX_TOKENS,
             temperature=TEMPERATURE,
             system=system_prompt,
@@ -248,7 +224,7 @@ def run_agent_loop(
             tool_ms = int((time.time() - tool_start) * 1000)
 
             # Determine tool type for trace
-            is_read = tool_block.name in ("get_eligibility", "get_claim_status", "search_knowledge_base")
+            is_read = tool_block.name in ("lookup_policy", "lookup_client", "verify_coverage", "get_claim_status", "search_knowledge_base")
             tool_type = "rag_search" if tool_block.name == "search_knowledge_base" else "tool_call"
 
             tool_call = ToolCall(

@@ -8,17 +8,13 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 DOCS_DIR = DATA_DIR / "docs"
 
-# AWS / Bedrock
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+# Anthropic API
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
-# Models — two-tier for cost efficiency
-# Haiku for fast/cheap classification, Sonnet for specialist reasoning
-SUPERVISOR_MODEL_ID = os.getenv(
-    "SUPERVISOR_MODEL_ID", "us.anthropic.claude-3-5-haiku-20241022-v1:0"
-)
-SPECIALIST_MODEL_ID = os.getenv(
-    "SPECIALIST_MODEL_ID", "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
-)
+# Model — Claude Sonnet 4 for everything
+MODEL = os.getenv("MODEL", "claude-sonnet-4-20250514")
+SUPERVISOR_MODEL = MODEL
+SPECIALIST_MODEL = MODEL
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "4096"))
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.1"))
 
@@ -31,4 +27,9 @@ RAG_CHUNK_OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", "100"))
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "4"))
 
 # Session
-SESSION_TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "30"))
+SESSION_TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "60"))
+
+# Agency info
+AGENCY_NAME = "Prairie Shield Insurance Group"
+AGENCY_CITY = "Omaha"
+AGENCY_STATE = "NE"

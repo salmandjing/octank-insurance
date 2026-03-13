@@ -1,108 +1,138 @@
-"""Mock claims API tools."""
+"""Mock claims API tools for ClaimFlow AI."""
 from __future__ import annotations
 import uuid
+import json
 from datetime import datetime, timezone
-from backend.state.session import MEMBERS_DB, CLAIMS_DB
+from pathlib import Path
+
+from backend.config import DATA_DIR
+
+_claims_path = DATA_DIR / "claims.json"
+
+# Load initial claims data
+def _load_claims():
+    with open(_claims_path) as f:
+        return json.load(f)["claims"]
+
+# In-memory claims store (loaded from file + any new claims added during session)
+_claims_db: dict | None = None
+
+def _get_claims_db():
+    global _claims_db
+    if _claims_db is None:
+        _claims_db = _load_claims()
+    return _claims_db
 
 
-def get_claim_status(member_id: str, claim_id: str | None = None) -> dict:
-    """Retrieve claim status for a member. If no claim_id, return all recent claims."""
-    member = MEMBERS_DB.get(member_id)
-    if not member:
-        return {"error": f"Member {member_id} not found"}
+def get_claim_status(client_id: str, claim_id: str | None = None) -> dict:
+    """Retrieve claim status for a client."""
+    claims = _get_claims_db()
 
     if claim_id:
-        claim = CLAIMS_DB.get(claim_id)
+        claim = claims.get(claim_id)
         if not claim:
             return {"error": f"Claim {claim_id} not found"}
-        if claim["member_id"] != member_id:
-            return {"error": f"Claim {claim_id} does not belong to member {member_id}"}
         return _format_claim(claim)
 
-    # Return all claims for this member
-    member_claims = [
-        _format_claim(c) for c in CLAIMS_DB.values()
-        if c["member_id"] == member_id
+    # Return all claims for this client
+    client_claims = [
+        _format_claim(c) for c in claims.values()
+        if c.get("client_id") == client_id
     ]
 
-    if not member_claims:
+    if not client_claims:
         return {
-            "member_id": member_id,
+            "client_id": client_id,
             "claims": [],
-            "message": "No claims found for this member."
+            "message": "No claims found for this client."
         }
 
     return {
-        "member_id": member_id,
-        "claims": member_claims,
+        "client_id": client_id,
+        "claims": client_claims,
     }
 
 
 def _format_claim(claim: dict) -> dict:
     return {
-        "claim_id": claim["claim_id"],
-        "status": claim["status"],
-        "type": claim["type"],
-        "filed_date": claim["filed_date"],
-        "date_of_loss": claim["date_of_loss"],
-        "description": claim["description"],
+        "claim_id": claim.get("id", claim.get("claim_id", "")),
+        "client_id": claim.get("client_id", ""),
+        "policy_id": claim.get("policy_id", ""),
+        "carrier": claim.get("carrier", ""),
+        "status": claim.get("status", ""),
+        "type": claim.get("type", ""),
+        "peril": claim.get("peril", ""),
+        "date_of_loss": claim.get("date_of_loss", ""),
+        "date_reported": claim.get("date_reported", ""),
+        "description": claim.get("description", ""),
         "estimated_damage": claim.get("estimated_damage"),
         "approved_amount": claim.get("approved_amount"),
         "adjuster": claim.get("adjuster"),
         "timeline": claim.get("timeline", []),
-        "next_steps": claim.get("next_steps", []),
+        "police_report": claim.get("police_report", False),
+        "police_report_number": claim.get("police_report_number", ""),
+        "injuries": claim.get("injuries", False),
     }
 
 
-def create_fnol(
-    member_id: str,
+def create_claim_record(
+    client_id: str,
+    policy_id: str,
+    carrier: str,
+    carrier_id: str,
+    loss_type: str,
     date_of_loss: str,
     description: str,
     location: str = "",
     injuries: bool = False,
     injury_description: str = "",
+    police_report: bool = False,
     police_report_number: str = "",
+    estimated_damage: float | None = None,
+    priority: str = "normal",
 ) -> dict:
-    """Create a First Notice of Loss (FNOL) claim."""
-    member = MEMBERS_DB.get(member_id)
-    if not member:
-        return {"error": f"Member {member_id} not found"}
+    """Create a new claim record in the mock AMS."""
+    claims = _get_claims_db()
 
-    claim_id = f"CLM-{datetime.now().year}-{uuid.uuid4().hex[:3].upper()}"
-    confirmation_number = f"CONF-{uuid.uuid4().hex[:8].upper()}"
+    claim_id = f"CLM-{datetime.now().year}-{uuid.uuid4().hex[:4].upper()}"
 
     new_claim = {
-        "claim_id": claim_id,
-        "confirmation_number": confirmation_number,
-        "member_id": member_id,
-        "policy_number": member["policy_number"],
-        "status": "filed",
-        "type": "collision",
-        "filed_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "id": claim_id,
+        "client_id": client_id,
+        "policy_id": policy_id,
+        "carrier": carrier,
+        "carrier_id": carrier_id,
+        "type": loss_type,
+        "peril": loss_type,
         "date_of_loss": date_of_loss,
+        "date_reported": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "status": "new",
         "description": description,
         "location": location,
         "injuries": injuries,
         "injury_description": injury_description if injuries else "",
+        "police_report": police_report,
         "police_report_number": police_report_number,
-        "next_steps": [
-            "A claims adjuster will be assigned within 24 hours and will contact you directly",
-            "Please have photos of the damage ready for the adjuster",
-            f"Your claim number is {claim_id} — use this for any follow-up inquiries",
-            "You can check your claim status anytime through our virtual agent or member portal",
+        "estimated_damage": estimated_damage,
+        "adjuster": None,
+        "photos_submitted": False,
+        "priority": priority,
+        "timeline": [
+            {"date": datetime.now(timezone.utc).strftime("%Y-%m-%d"), "event": "FNOL submitted by agency via ClaimFlow AI"}
         ],
     }
 
-    # Add to in-memory DB
-    CLAIMS_DB[claim_id] = new_claim
+    claims[claim_id] = new_claim
 
     return {
         "claim_id": claim_id,
-        "confirmation_number": confirmation_number,
-        "status": "filed",
-        "filed_date": new_claim["filed_date"],
-        "next_steps": new_claim["next_steps"],
-        "message": f"Your FNOL has been successfully filed. Claim ID: {claim_id}, Confirmation: {confirmation_number}",
+        "status": "new",
+        "message": f"Claim {claim_id} created successfully.",
+        "next_steps": [
+            f"Carrier ({carrier}) will be notified",
+            "An adjuster will be assigned — typical response within 24 hours",
+            "Client confirmation email will be sent",
+        ],
     }
 
 
@@ -114,30 +144,5 @@ def escalate_to_human(reason: str, conversation_summary: str) -> dict:
         "status": "escalated",
         "reason": reason,
         "conversation_summary": conversation_summary,
-        "estimated_wait_time": "3 minutes",
-        "message": "You are being connected to a claims specialist. Your estimated wait time is approximately 3 minutes. A summary of our conversation has been shared with the specialist so you won't need to repeat yourself.",
-        "queue_position": 2,
-    }
-
-
-def schedule_callback(
-    member_id: str,
-    preferred_time: str = "",
-    phone_number: str = "",
-    reason: str = "",
-) -> dict:
-    """Schedule a callback from a human agent."""
-    member = MEMBERS_DB.get(member_id)
-    if not member:
-        return {"error": f"Member {member_id} not found"}
-
-    callback_id = f"CB-{uuid.uuid4().hex[:8].upper()}"
-    return {
-        "callback_id": callback_id,
-        "status": "scheduled",
-        "member_id": member_id,
-        "preferred_time": preferred_time or "Next available slot",
-        "phone_number": phone_number or member.get("phone", "On file"),
-        "reason": reason,
-        "message": f"Your callback has been scheduled (ID: {callback_id}). An agent will call you at {preferred_time or 'the next available time'}. You'll receive a confirmation via text.",
+        "message": "This has been escalated to a CSR for manual review. A team member will follow up shortly.",
     }

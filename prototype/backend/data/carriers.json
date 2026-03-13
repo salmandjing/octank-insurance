@@ -1,0 +1,61 @@
+{
+  "carriers": {
+    "CARRIER-AO": {
+      "id": "CARRIER-AO",
+      "name": "Auto-Owners Insurance",
+      "lines": ["personal_auto", "homeowners", "commercial_auto", "commercial_property", "umbrella", "renters"],
+      "fnol_method": "portal",
+      "fnol_portal_url": "https://claims.auto-owners.com",
+      "fnol_phone": "1-888-252-4626",
+      "claims_email": "claims@auto-owners.com",
+      "required_fnol_fields": ["policy_number", "date_of_loss", "time_of_loss", "location", "description", "claimant_contact", "police_report_number", "injuries", "other_parties"],
+      "submission_format": "acord_form",
+      "avg_response_time_hours": 24,
+      "adjuster_assignment": "auto"
+    },
+    "CARRIER-ERIE": {
+      "id": "CARRIER-ERIE",
+      "name": "Erie Insurance",
+      "lines": ["personal_auto", "homeowners", "commercial_property"],
+      "fnol_method": "portal_and_email",
+      "fnol_portal_url": "https://erieinsurance.com/claims",
+      "fnol_phone": "1-800-367-3743",
+      "claims_email": "newclaims@erieinsurance.com",
+      "required_fnol_fields": ["policy_number", "date_of_loss", "location", "description", "claimant_contact", "photos", "injuries", "emergency_services_called"],
+      "submission_format": "erie_digital",
+      "avg_response_time_hours": 12
+    },
+    "CARRIER-EMC": {
+      "id": "CARRIER-EMC",
+      "name": "EMC Insurance (EMCASCO)",
+      "lines": ["commercial_auto", "commercial_property", "general_liability", "workers_comp", "farm_ranch", "motor_truck_cargo"],
+      "fnol_method": "portal",
+      "fnol_portal_url": "https://emcins.com/claims",
+      "fnol_phone": "1-800-362-2227",
+      "claims_email": "claims@emcins.com",
+      "required_fnol_fields": ["policy_number", "date_of_loss", "time_of_loss", "location", "description", "claimant_contact", "injuries", "police_report_number", "estimated_damage", "witness_info"],
+      "submission_format": "acord_form"
+    },
+    "CARRIER-GRIN": {
+      "id": "CARRIER-GRIN",
+      "name": "Grinnell Mutual",
+      "lines": ["farm_ranch", "homeowners", "personal_auto", "commercial_property"],
+      "fnol_method": "phone_and_email",
+      "fnol_phone": "1-800-362-2041",
+      "claims_email": "claimsreport@grinnellmutual.com",
+      "required_fnol_fields": ["policy_number", "date_of_loss", "location", "description", "claimant_contact", "injuries", "type_of_loss"],
+      "submission_format": "custom_form"
+    },
+    "CARRIER-WF": {
+      "id": "CARRIER-WF",
+      "name": "Westfield Insurance",
+      "lines": ["personal_auto", "homeowners", "commercial_property", "general_liability"],
+      "fnol_method": "portal",
+      "fnol_portal_url": "https://westfieldinsurance.com/claims",
+      "fnol_phone": "1-800-243-0210",
+      "claims_email": "claims@westfieldinsurance.com",
+      "required_fnol_fields": ["policy_number", "date_of_loss", "time_of_loss", "location", "description", "claimant_contact", "police_report_number"],
+      "submission_format": "acord_form"
+    }
+  }
+}

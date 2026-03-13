@@ -1,68 +1,86 @@
-"""Supervisor agent — intent classification and routing."""
+"""Supervisor agent — intent classification and routing for ClaimFlow AI."""
 from __future__ import annotations
 import json
 import logging
-from anthropic import AnthropicBedrock
+import anthropic
 
-from backend.config import AWS_REGION, SUPERVISOR_MODEL_ID
-from backend.models import Intent
+from backend.config import SUPERVISOR_MODEL, TEMPERATURE
+from backend.models import Intent, Priority
 
 logger = logging.getLogger(__name__)
-client = AnthropicBedrock(aws_region=AWS_REGION)
+client = anthropic.Anthropic()
 
-SUPERVISOR_SYSTEM_PROMPT = """You are a supervisor agent for Octank Insurance's virtual assistant. Your ONLY job is to classify the member's intent and decide which specialist agent should handle their request.
-
-Analyze the member's message and the conversation history, then use the classify_intent tool to return your classification.
+SUPERVISOR_SYSTEM_PROMPT = """You are the supervisor agent for ClaimFlow AI at Prairie Shield Insurance Group in Omaha, Nebraska. Your job is to classify the intent and priority of incoming messages.
 
 ## Intent Categories
 
-- **eligibility**: Questions about coverage, benefits, deductibles, policy details, what's covered/not covered, limits, discounts, premiums, billing
-- **fnol**: Member wants to report an accident or incident, file a new claim, or report damage/theft/loss. Keywords: accident, fender bender, crash, hit, damage, stolen, vandalized, hail, file a claim
-- **claim_status**: Questions about an existing claim, claim progress, timeline, adjuster info, next steps, payment status. Keywords: my claim, claim status, where is my claim, claim number, adjuster
-- **general**: Greetings, general questions about Octank, questions not related to the above categories, or unclear intent
-- **escalate**: Member explicitly asks to speak to a human, agent, representative, manager, or supervisor. Also if member expresses extreme frustration or anger.
+- **fnol_auto**: Auto accident/damage claim (collision, comprehensive, theft, vandalism)
+- **fnol_property**: Home/commercial property damage claim (hail, wind, fire, water, theft)
+- **fnol_farm**: Farm/ranch loss claim (livestock, structures, equipment, crop)
+- **fnol_commercial**: Commercial liability/vehicle claim (commercial auto, GL, product liability)
+- **fnol_workers_comp**: Workers compensation claim (workplace injury)
+- **claim_status**: Check on existing claim, claim progress, adjuster info
+- **policy_question**: Coverage question, policy lookup, deductible question
+- **coi_request**: Certificate of insurance request
+- **billing_question**: Payment, premium question
+- **general**: Greetings, general questions, unclear intent
+- **escalate**: Wants to talk to a human, extreme frustration
+
+## Priority Levels
+
+- **critical**: Ongoing damage, injuries requiring medical attention, fire
+- **high**: Minor injuries, commercial vehicle, workers comp, livestock
+- **elevated**: Large loss estimate, multiple vehicles, time-sensitive
+- **normal**: Standard FNOL filing or inquiry
 
 ## Routing Rules
 
-1. If the member mentions an accident, incident, or wants to file/report something → **fnol**
-2. If the member asks about an existing claim or claim number → **claim_status**
-3. If the member asks about their coverage, deductible, benefits, or policy → **eligibility**
-4. If the member says "talk to a human", "speak to someone", "real person", "manager" → **escalate**
-5. If the member uses profanity or expresses extreme frustration → **escalate**
-6. For greetings or unclear messages → **general**
+1. Mentions accident, crash, collision, hit, damage to vehicle -> **fnol_auto**
+2. Mentions hail, wind, roof, water damage, fire, theft at home/building -> **fnol_property**
+3. Mentions barn, grain bin, cattle, livestock, farm equipment -> **fnol_farm**
+4. Mentions truck accident, company vehicle, slip and fall at business -> **fnol_commercial**
+5. Mentions workplace injury, hurt at work, on the job -> **fnol_workers_comp**
+6. Mentions existing claim, claim number, adjuster, claim status -> **claim_status**
+7. Mentions coverage, deductible, what's covered, policy details -> **policy_question**
+8. Mentions certificate, COI, proof of insurance -> **coi_request**
+9. Mentions payment, bill, premium -> **billing_question**
+10. Wants human, manager, real person, extremely frustrated -> **escalate**
+11. Greetings or unclear -> **general**
 
-## Important
-- Look at the FULL conversation history, not just the last message
-- If the conversation has been about FNOL and the member is providing follow-up info, keep routing to **fnol**
-- If the conversation has been about claims and member asks a follow-up, keep routing to **claim_status**
+Look at the FULL conversation history, not just the last message. If conversation has been about filing a claim, keep routing to the appropriate fnol type.
 """
 
 CLASSIFY_TOOL = {
     "name": "classify_intent",
-    "description": "Classify the member's intent, assess sentiment, and route to the appropriate specialist",
+    "description": "Classify the intent and priority of the message",
     "input_schema": {
         "type": "object",
         "properties": {
             "intent": {
                 "type": "string",
-                "enum": ["eligibility", "fnol", "claim_status", "general", "escalate"],
+                "enum": [i.value for i in Intent],
                 "description": "The classified intent"
+            },
+            "priority": {
+                "type": "string",
+                "enum": [p.value for p in Priority],
+                "description": "Priority level"
             },
             "confidence": {
                 "type": "number",
-                "description": "Confidence score from 0.0 to 1.0"
+                "description": "Confidence score 0.0 to 1.0"
             },
             "reasoning": {
                 "type": "string",
-                "description": "Brief explanation of why this intent was chosen"
+                "description": "Brief explanation"
             },
             "sentiment": {
                 "type": "string",
                 "enum": ["positive", "neutral", "concerned", "frustrated", "angry"],
-                "description": "The member's current emotional state based on their message tone and language"
+                "description": "Emotional state"
             }
         },
-        "required": ["intent", "confidence", "reasoning", "sentiment"]
+        "required": ["intent", "priority", "confidence", "reasoning", "sentiment"]
     }
 }
 
@@ -71,43 +89,46 @@ def classify_intent(
     messages: list[dict],
     member_name: str = "",
     current_agent: str = "",
-) -> tuple[Intent, float, str, str]:
-    """Classify the intent of the latest user message given conversation history.
-
-    Returns (intent, confidence, reasoning, sentiment).
-    """
-    # Add context about current agent for continuity
+) -> tuple[Intent, float, str, str, Priority]:
+    """Returns (intent, confidence, reasoning, sentiment, priority)."""
     context_note = ""
     if current_agent:
-        context_note = f"\n\nNote: The conversation is currently being handled by the {current_agent}. Only reclassify if the member's intent has clearly changed."
+        context_note = f"\n\nNote: Currently handled by {current_agent}. Only reclassify if intent has clearly changed."
 
-    response = client.messages.create(
-        model=SUPERVISOR_MODEL_ID,
-        max_tokens=512,
-        temperature=0.0,
-        system=SUPERVISOR_SYSTEM_PROMPT + context_note,
-        messages=messages,
-        tools=[CLASSIFY_TOOL],
-        tool_choice={"type": "tool", "name": "classify_intent"},
-    )
+    try:
+        response = client.messages.create(
+            model=SUPERVISOR_MODEL,
+            max_tokens=512,
+            temperature=0.0,
+            system=SUPERVISOR_SYSTEM_PROMPT + context_note,
+            messages=messages,
+            tools=[CLASSIFY_TOOL],
+            tool_choice={"type": "tool", "name": "classify_intent"},
+        )
 
-    # Extract tool use result
-    for block in response.content:
-        if block.type == "tool_use" and block.name == "classify_intent":
-            result = block.input
-            intent_str = result.get("intent", "general")
-            confidence = result.get("confidence", 0.5)
-            reasoning = result.get("reasoning", "")
-            sentiment = result.get("sentiment", "neutral")
+        for block in response.content:
+            if block.type == "tool_use" and block.name == "classify_intent":
+                result = block.input
+                intent_str = result.get("intent", "general")
+                confidence = result.get("confidence", 0.5)
+                reasoning = result.get("reasoning", "")
+                sentiment = result.get("sentiment", "neutral")
+                priority_str = result.get("priority", "normal")
 
-            try:
-                intent = Intent(intent_str)
-            except ValueError:
-                intent = Intent.GENERAL
+                try:
+                    intent = Intent(intent_str)
+                except ValueError:
+                    intent = Intent.GENERAL
 
-            logger.info(f"[Supervisor] Intent: {intent.value} ({confidence:.0%}) Sentiment: {sentiment} — {reasoning}")
-            return intent, confidence, reasoning, sentiment
+                try:
+                    priority = Priority(priority_str)
+                except ValueError:
+                    priority = Priority.NORMAL
 
-    # Fallback
-    logger.warning("[Supervisor] Failed to classify intent, defaulting to GENERAL")
-    return Intent.GENERAL, 0.5, "Classification failed, defaulting to general", "neutral"
+                logger.info(f"[Supervisor] Intent: {intent.value} Priority: {priority.value} ({confidence:.0%}) Sentiment: {sentiment}")
+                return intent, confidence, reasoning, sentiment, priority
+
+    except Exception as e:
+        logger.error(f"[Supervisor] Classification failed: {e}")
+
+    return Intent.GENERAL, 0.5, "Classification failed, defaulting to general", "neutral", Priority.NORMAL

@@ -1,4 +1,4 @@
-"""FastAPI application — main entry point."""
+"""ClaimFlow AI — FastAPI application entry point."""
 import asyncio
 import json
 import logging
@@ -12,60 +12,62 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from anthropic import AnthropicBedrock
 
-from backend.config import BASE_DIR, DOCS_DIR, AWS_REGION, SUPERVISOR_MODEL_ID
-from backend.models import Intent, AuditEntry, TraceStep, HandoffContext
-from backend.state.session import SessionManager
+from backend.config import BASE_DIR, DOCS_DIR
+from backend.models import (
+    Intent, FNOL_INTENTS, Priority, AuditEntry, TraceStep, HandoffContext, ClaimStatus,
+)
+from backend.state.session import SessionManager, ClaimPipeline
 from backend.rag.retriever import retriever
 from backend.agents.supervisor import classify_intent
-from backend.agents.eligibility import run_eligibility_agent
+from backend.agents.email_parser import parse_email
 from backend.agents.fnol import run_fnol_agent
+from backend.agents.policy_lookup import run_policy_lookup_agent
 from backend.agents.claims import run_claims_agent
 from backend.agents.base import run_agent_loop, TOOL_DEFINITIONS
-from backend.guardrails.safety import redact_pii, check_blocked_topics, detect_pii, validate_response
+from backend.carriers.router import carrier_router
+from backend.tools.ams_api import lookup_policy, lookup_client, verify_coverage
+from backend.tools.carrier_api import get_carrier_requirements
+from backend.tools.document_generator import (
+    generate_carrier_submission, generate_client_confirmation, generate_followup_email,
+)
+from backend.tools.email_intake import get_sample_email, list_scenarios, SAMPLE_EMAILS
+from backend.tools.claims_api import create_claim_record
+from backend.guardrails.safety import (
+    redact_pii, check_blocked_topics, detect_pii, validate_response, check_compliance_flags,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 session_manager = SessionManager()
+claim_pipeline = ClaimPipeline()
 
-# WebSocket connections per session
 ws_connections: Dict[str, List[WebSocket]] = {}
-
-# Live analytics counters — tracked across all sessions
-_live_analytics = {
-    "intents": {"eligibility": 0, "fnol": 0, "claim_status": 0, "general": 0, "escalate": 0},
-    "sentiments": {"positive": 0, "neutral": 0, "concerned": 0, "frustrated": 0, "angry": 0},
-    "tools": {},
-    "total_turns": 0,
-    "total_sessions": 0,
-    "total_latency_ms": 0,
-    "escalation_count": 0,
-}
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize RAG index on startup."""
     retriever.initialize()
-    logger.info("Octank Insurance Virtual Agent ready")
+    logger.info("ClaimFlow AI ready — Prairie Shield Insurance Group")
     yield
 
 
-app = FastAPI(title="Octank Insurance Virtual Agent", lifespan=lifespan)
+app = FastAPI(title="ClaimFlow AI — FNOL Automation", lifespan=lifespan)
 
 FRONTEND_DIR = BASE_DIR.parent / "frontend"
 
 
-# ── REST API ──────────────────────────────────────────────────────────
+# ── Pydantic models ──────────────────────────────────────────────────
 
-class StartSessionRequest(BaseModel):
-    member_id: str
+class EmailIntakeRequest(BaseModel):
+    email_text: str
+    from_address: str = ""
+    subject: str = ""
 
-class StartSessionResponse(BaseModel):
-    session_id: str
-    member: dict
+class ClaimApproveRequest(BaseModel):
+    extraction: dict = {}
 
 class ChatRequest(BaseModel):
     session_id: str
@@ -83,83 +85,410 @@ class ChatResponse(BaseModel):
     handoff_context: Optional[dict] = None
     confidence: float = 1.0
     sentiment: str = "neutral"
+    priority: str = "normal"
     latency_ms: int = 0
     latency_breakdown: Dict[str, int] = {}
     guardrail_flags: List[dict] = []
 
 
-class AgentDesktopResponse(BaseModel):
-    session_id: str
-    member: dict
-    sentiment_history: List[str] = []
-    current_sentiment: str = "neutral"
-    conversation: List[dict] = []
-    ai_summary: str = ""
-    actions_taken: List[dict] = []
-    knowledge_retrieved: List[dict] = []
-    knowledge_proactive: List[dict] = []
-    suggested_actions: List[str] = []
-    open_questions: List[str] = []
-    escalation: dict = {}
-    session_meta: dict = {}
-
+# ── Health & Data ────────────────────────────────────────────────────
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok", "service": "octank-virtual-agent", "rag_ready": retriever._ready}
+    return {"status": "ok", "service": "claimflow-ai", "rag_ready": retriever._ready}
+
+
+@app.get("/api/clients")
+def list_clients():
+    return {"clients": session_manager.get_clients()}
+
+
+@app.get("/api/policies")
+def list_policies():
+    from backend.state.session import get_policies_db
+    policies = get_policies_db()
+    return {"policies": list(policies.values())}
+
+
+@app.get("/api/policies/search")
+def search_policies(q: str = ""):
+    from backend.state.session import get_policies_db, get_clients_db
+    if not q:
+        return {"results": []}
+    policies = get_policies_db()
+    clients = get_clients_db()
+    results = []
+    q_lower = q.lower()
+    for pid, pol in policies.items():
+        pn = pol.get("policy_number", "").lower()
+        client = clients.get(pol.get("client_id", ""), {})
+        cname = client.get("name", "").lower()
+        if q_lower in pn or q_lower in pid.lower() or q_lower in cname:
+            results.append({**pol, "client_name": client.get("name", "")})
+    return {"results": results}
+
+
+@app.get("/api/policies/{policy_id}")
+def get_policy(policy_id: str):
+    from backend.state.session import get_policies_db
+    policies = get_policies_db()
+    pol = policies.get(policy_id)
+    if not pol:
+        for pid, p in policies.items():
+            if p.get("policy_number", "") == policy_id:
+                pol = p
+                break
+    if not pol:
+        raise HTTPException(status_code=404, detail="Policy not found")
+    return pol
+
+
+@app.get("/api/carriers")
+def list_carriers():
+    from backend.state.session import get_carriers_db
+    return {"carriers": list(get_carriers_db().values())}
+
+
+@app.get("/api/carriers/{carrier_id}")
+def get_carrier(carrier_id: str):
+    from backend.state.session import get_carriers_db
+    carriers = get_carriers_db()
+    carrier = carriers.get(carrier_id)
+    if not carrier:
+        raise HTTPException(status_code=404, detail="Carrier not found")
+    return carrier
 
 
 @app.get("/api/docs/{doc_name}")
 def get_document(doc_name: str):
-    """Serve a raw policy document for the document viewer."""
     doc_path = DOCS_DIR / doc_name
     if not doc_path.exists() or not doc_path.suffix == ".md":
         raise HTTPException(status_code=404, detail="Document not found")
     return {"doc_name": doc_name, "content": doc_path.read_text(encoding="utf-8")}
 
 
-@app.get("/api/members")
-def list_members():
-    return {"members": session_manager.get_members()}
+# ── Claims Pipeline ─────────────────────────────────────────────────
 
+@app.post("/api/claims/intake")
+async def intake_claim(req: EmailIntakeRequest):
+    """Submit an email for FNOL processing. Core pipeline endpoint."""
+    start_time = time.time()
+    all_trace = []
 
-@app.post("/api/session/start", response_model=StartSessionResponse)
-def start_session(req: StartSessionRequest):
-    try:
-        session = session_manager.create_session(req.member_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-    _live_analytics["total_sessions"] += 1
-
-    return StartSessionResponse(
-        session_id=session.session_id,
-        member=session.member_data,
+    # 1. Create claim record
+    record = claim_pipeline.create_claim(
+        email_raw=req.email_text,
+        email_from=req.from_address,
+        email_subject=req.subject,
     )
+    all_trace.append({"name": "Email Received", "step_type": "intake", "duration_ms": 0,
+                       "status": "success", "details": {"claim_id": record.claim_id, "from": req.from_address}})
 
+    await _ws_broadcast("claims", {"type": "email_received", "claim_id": record.claim_id,
+                                     "from": req.from_address, "subject": req.subject})
 
-@app.get("/api/session/{session_id}")
-def get_session(session_id: str):
-    session = session_manager.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found or expired")
+    # 2. Parse email
+    record.status = "processing"
+    await _ws_broadcast("claims", {"type": "parsing_started", "claim_id": record.claim_id})
+
+    loop = asyncio.get_event_loop()
+    extraction, parse_traces = await loop.run_in_executor(
+        None, parse_email, req.email_text, req.from_address, req.subject
+    )
+    all_trace.extend([{"name": t.name, "step_type": t.step_type, "duration_ms": t.duration_ms,
+                        "status": t.status, "details": t.details} for t in parse_traces])
+
+    record.extraction = {
+        "reporter_name": extraction.reporter_name,
+        "reporter_email": extraction.reporter_email,
+        "reporter_phone": extraction.reporter_phone,
+        "client_name": extraction.client_name,
+        "policy_number": extraction.policy_number,
+        "date_of_loss": extraction.date_of_loss,
+        "time_of_loss": extraction.time_of_loss,
+        "location": extraction.location,
+        "loss_type": extraction.loss_type,
+        "description": extraction.description,
+        "injuries": extraction.injuries,
+        "injury_description": extraction.injury_description,
+        "police_report": extraction.police_report,
+        "police_report_number": extraction.police_report_number,
+        "other_parties": extraction.other_parties,
+        "photos_mentioned": extraction.photos_mentioned,
+        "urgency": extraction.urgency,
+        "missing_fields": extraction.missing_fields,
+        "confidence_score": extraction.confidence_score,
+    }
+    record.priority = extraction.urgency
+
+    await _ws_broadcast("claims", {"type": "extraction_complete", "claim_id": record.claim_id,
+                                     "extraction": record.extraction})
+
+    # 3. Policy lookup
+    policy_data = {}
+    if extraction.policy_number:
+        await _ws_broadcast("claims", {"type": "policy_lookup_started", "claim_id": record.claim_id})
+        pol_start = time.time()
+        policy_data = await loop.run_in_executor(None, lookup_policy, extraction.policy_number)
+        pol_ms = int((time.time() - pol_start) * 1000)
+        all_trace.append({"name": "Policy Lookup", "step_type": "tool_call", "duration_ms": pol_ms,
+                           "status": "error" if "error" in policy_data else "success",
+                           "details": {"policy_number": extraction.policy_number,
+                                       "found": "error" not in policy_data}})
+        record.policy_data = policy_data
+
+        if "error" not in policy_data:
+            await _ws_broadcast("claims", {"type": "policy_verified", "claim_id": record.claim_id,
+                                             "policy": {"carrier": policy_data.get("carrier", ""),
+                                                        "type": policy_data.get("type", ""),
+                                                        "status": policy_data.get("status", "")}})
+
+            # 4. Coverage verification
+            if extraction.date_of_loss and extraction.loss_type:
+                cov_data = await loop.run_in_executor(
+                    None, verify_coverage,
+                    policy_data.get("id", ""), extraction.date_of_loss, extraction.loss_type
+                )
+                all_trace.append({"name": "Coverage Check", "step_type": "tool_call", "duration_ms": 0,
+                                   "status": "success",
+                                   "details": {"potentially_covered": cov_data.get("potentially_covered", False)}})
+
+            # 5. Carrier requirements
+            carrier_id = policy_data.get("carrier_id", "")
+            if carrier_id:
+                await _ws_broadcast("claims", {"type": "carrier_identified", "claim_id": record.claim_id,
+                                                 "carrier": policy_data.get("carrier", "")})
+                carrier_data = await loop.run_in_executor(None, get_carrier_requirements, carrier_id)
+                record.carrier_data = carrier_data
+                all_trace.append({"name": "Carrier Requirements Loaded", "step_type": "tool_call",
+                                   "duration_ms": 0, "status": "success",
+                                   "details": {"carrier": carrier_data.get("carrier_name", ""),
+                                               "format": carrier_data.get("submission_format", "")}})
+
+                # 6. Validate submission completeness
+                validation = carrier_router.validate_submission(carrier_id, record.extraction)
+                all_trace.append({"name": "Submission Validation", "step_type": "validation",
+                                   "duration_ms": 0, "status": "success" if validation.get("valid") else "warning",
+                                   "details": validation})
+
+    # 7. Compliance flags
+    compliance_flags = check_compliance_flags(record.extraction)
+    if compliance_flags:
+        all_trace.append({"name": "Compliance Check", "step_type": "guardrail", "duration_ms": 0,
+                           "status": "warning", "details": {"flags": compliance_flags}})
+
+    # Determine final status
+    if extraction.missing_fields and "policy_number" in extraction.missing_fields:
+        record.status = "follow_up"
+    elif extraction.confidence_score >= 0.7 and "error" not in policy_data:
+        record.status = "needs_review"
+    else:
+        record.status = "needs_review"
+
+    record.trace_steps = all_trace
+    total_ms = int((time.time() - start_time) * 1000)
+
+    all_trace.append({"name": "Ready for Review", "step_type": "pipeline", "duration_ms": total_ms,
+                       "status": "success", "details": {"final_status": record.status}})
+
+    await _ws_broadcast("claims", {"type": "ready_for_review", "claim_id": record.claim_id,
+                                     "status": record.status, "total_ms": total_ms})
+
     return {
-        "session_id": session.session_id,
-        "member_id": session.member_id,
-        "member": session.member_data,
-        "turn_count": session.turn_count,
-        "escalated": session.escalated,
-        "current_agent": session.current_agent,
-        "messages": session.messages,
+        "claim_id": record.claim_id,
+        "status": record.status,
+        "extraction": record.extraction,
+        "policy_data": record.policy_data,
+        "carrier_data": record.carrier_data,
+        "priority": record.priority,
+        "compliance_flags": compliance_flags,
+        "trace_steps": all_trace,
+        "latency_ms": total_ms,
     }
 
 
-@app.get("/api/session/{session_id}/audit")
-def get_audit_log(session_id: str):
-    session = session_manager.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found or expired")
-    return {"audit_log": session.audit_log}
+@app.get("/api/claims")
+def list_claims():
+    return {"claims": claim_pipeline.list_claims()}
+
+
+@app.get("/api/claims/{claim_id}")
+def get_claim(claim_id: str):
+    record = claim_pipeline.get_claim(claim_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    return {
+        "claim_id": record.claim_id,
+        "status": record.status,
+        "email_raw": record.email_raw,
+        "email_from": record.email_from,
+        "email_subject": record.email_subject,
+        "extraction": record.extraction,
+        "policy_data": record.policy_data,
+        "carrier_data": record.carrier_data,
+        "carrier_submission": record.carrier_submission,
+        "client_email": record.client_email,
+        "followup_email": record.followup_email,
+        "priority": record.priority,
+        "trace_steps": record.trace_steps,
+        "created_at": record.created_at,
+    }
+
+
+@app.post("/api/claims/{claim_id}/approve")
+async def approve_claim(claim_id: str, req: ClaimApproveRequest):
+    """Approve AI extraction (optionally with edits) and generate submission documents."""
+    record = claim_pipeline.get_claim(claim_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Claim not found")
+
+    # Apply any edits from the CSR
+    if req.extraction:
+        record.extraction.update(req.extraction)
+
+    record.status = "approved"
+    start = time.time()
+    loop = asyncio.get_event_loop()
+
+    # Generate carrier submission and client email in parallel
+    sub_future = loop.run_in_executor(
+        None, generate_carrier_submission,
+        record.extraction, record.policy_data, record.carrier_data
+    )
+    email_future = loop.run_in_executor(
+        None, generate_client_confirmation,
+        record.extraction, record.policy_data, record.carrier_data, claim_id
+    )
+
+    sub_result, email_result = await asyncio.gather(sub_future, email_future)
+
+    record.carrier_submission = sub_result.get("submission_text", "")
+    record.client_email = email_result.get("email_text", "")
+
+    total_ms = int((time.time() - start) * 1000)
+
+    await _ws_broadcast("claims", {"type": "submission_generated", "claim_id": claim_id})
+
+    return {
+        "claim_id": claim_id,
+        "status": "approved",
+        "carrier_submission": record.carrier_submission,
+        "client_email": record.client_email,
+        "client_email_to": email_result.get("to", ""),
+        "client_email_subject": email_result.get("subject", ""),
+        "latency_ms": total_ms,
+    }
+
+
+@app.post("/api/claims/{claim_id}/submit")
+async def submit_claim(claim_id: str):
+    """Mark claim as submitted to carrier (mock)."""
+    record = claim_pipeline.get_claim(claim_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Claim not found")
+
+    record.status = "submitted"
+
+    # Create a claim record in the mock AMS
+    if record.policy_data and record.extraction:
+        create_claim_record(
+            client_id=record.policy_data.get("client_id", ""),
+            policy_id=record.policy_data.get("id", ""),
+            carrier=record.policy_data.get("carrier", ""),
+            carrier_id=record.policy_data.get("carrier_id", ""),
+            loss_type=record.extraction.get("loss_type", ""),
+            date_of_loss=record.extraction.get("date_of_loss", ""),
+            description=record.extraction.get("description", ""),
+            location=record.extraction.get("location", ""),
+            injuries=record.extraction.get("injuries", False),
+            police_report=record.extraction.get("police_report", False),
+            police_report_number=record.extraction.get("police_report_number", ""),
+            priority=record.priority,
+        )
+
+    await _ws_broadcast("claims", {"type": "claim_submitted", "claim_id": claim_id})
+
+    return {
+        "claim_id": claim_id,
+        "status": "submitted",
+        "message": f"Claim {claim_id} has been submitted to {record.carrier_data.get('carrier_name', 'the carrier')}.",
+    }
+
+
+@app.get("/api/claims/{claim_id}/submission")
+def get_claim_submission(claim_id: str):
+    record = claim_pipeline.get_claim(claim_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    return {"claim_id": claim_id, "carrier_submission": record.carrier_submission}
+
+
+@app.get("/api/claims/{claim_id}/client-email")
+def get_claim_client_email(claim_id: str):
+    record = claim_pipeline.get_claim(claim_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    return {"claim_id": claim_id, "client_email": record.client_email}
+
+
+@app.post("/api/claims/{claim_id}/followup")
+async def generate_claim_followup(claim_id: str):
+    """Generate a follow-up email for missing information."""
+    record = claim_pipeline.get_claim(claim_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Claim not found")
+
+    missing = record.extraction.get("missing_fields", [])
+    if not missing:
+        return {"claim_id": claim_id, "message": "No missing fields identified."}
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, generate_followup_email, record.extraction, missing)
+
+    record.followup_email = result.get("email_text", "")
+    record.status = "follow_up"
+
+    return {
+        "claim_id": claim_id,
+        "followup_email": record.followup_email,
+        "to": result.get("to", ""),
+        "subject": result.get("subject", ""),
+        "missing_fields": missing,
+    }
+
+
+# ── Demo Scenarios ───────────────────────────────────────────────────
+
+@app.get("/api/demo/scenarios")
+def demo_scenarios():
+    return {"scenarios": list_scenarios()}
+
+
+@app.post("/api/demo/scenario/{scenario_name}")
+async def run_demo_scenario(scenario_name: str):
+    """Trigger a demo scenario — loads a pre-written email and processes it."""
+    email = get_sample_email(scenario_name)
+    if not email:
+        raise HTTPException(status_code=404, detail=f"Scenario '{scenario_name}' not found")
+
+    # Process through the intake pipeline
+    req = EmailIntakeRequest(
+        email_text=email["body"],
+        from_address=email["from"],
+        subject=email["subject"],
+    )
+    return await intake_claim(req)
+
+
+# ── Chat (for claim status queries, interactive mode) ────────────────
+
+@app.post("/api/session/start")
+def start_session(client_id: str = "CLI-1001"):
+    try:
+        session = session_manager.create_session(client_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {"session_id": session.session_id, "client": session.member_data}
 
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -172,129 +501,105 @@ async def chat(req: ChatRequest):
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    # Detect PII in user message
     pii_found = detect_pii(user_message)
     guardrail_flags = []
     if pii_found:
         guardrail_flags.append({"type": "pii_detected", "details": pii_found, "action": "redacted_in_logs"})
 
-    # Check guardrails — blocked topics
     blocked, blocked_topic = check_blocked_topics(user_message)
     if blocked:
         session.add_message("user", user_message)
         session.add_message("assistant", blocked)
-        guardrail_flags.append({"type": "topic_blocked", "topic": blocked_topic, "action": "redirected"})
-        trace_data = [
-            {"name": "Input Guardrails", "step_type": "guardrail", "duration_ms": 1, "status": "blocked",
-             "details": {"check": "topic_blocking", "topic": blocked_topic, "result": "BLOCKED"}},
-        ]
-        if pii_found:
-            trace_data.insert(0, {"name": "PII Detection", "step_type": "guardrail", "duration_ms": 0, "status": "warning",
-                                  "details": {"pii_types": [p["type"] for p in pii_found], "action": "redacted"}})
         return ChatResponse(
             response=blocked, intent="blocked", agent="guardrails",
-            trace_steps=trace_data, guardrail_flags=guardrail_flags,
+            trace_steps=[{"name": "Topic Blocked", "step_type": "guardrail", "duration_ms": 0,
+                          "status": "blocked", "details": {"topic": blocked_topic}}],
+            guardrail_flags=guardrail_flags,
         )
 
-    # Add user message to session
     session.add_message("user", user_message)
-
     start_time = time.time()
 
-    # Broadcast processing start via WebSocket
-    await _ws_broadcast(session.session_id, {
-        "type": "processing_started",
-        "message": user_message,
-    })
+    await _ws_broadcast(session.session_id, {"type": "processing_started", "message": user_message})
 
-    # 1. Classify intent via Supervisor
+    # Classify intent
     conversation_history = session.get_conversation_history()
-    supervisor_start = time.time()
-    intent, confidence, reasoning, sentiment = classify_intent(
+    sup_start = time.time()
+    intent, confidence, reasoning, sentiment, priority = classify_intent(
         messages=conversation_history,
         member_name=session.member_data.get("name", ""),
         current_agent=session.current_agent,
     )
-    supervisor_ms = int((time.time() - supervisor_start) * 1000)
+    sup_ms = int((time.time() - sup_start) * 1000)
 
-    # Track sentiment history
     session.sentiment_history.append(sentiment)
 
-    # Initialize trace steps
     trace_steps = [
-        TraceStep(
-            name="Supervisor Classification",
-            step_type="supervisor",
-            duration_ms=supervisor_ms,
-            details={"intent": intent.value, "confidence": confidence, "sentiment": sentiment, "reasoning": reasoning},
-        ),
-        TraceStep(
-            name=f"Route → {intent.value}",
-            step_type="routing",
-            duration_ms=0,
-            details={"from": session.current_agent or "none", "to": intent.value},
-        ),
+        {"name": "Supervisor Classification", "step_type": "supervisor", "duration_ms": sup_ms,
+         "status": "success", "details": {"intent": intent.value, "confidence": confidence,
+                                           "sentiment": sentiment, "priority": priority.value, "reasoning": reasoning}},
     ]
 
-    await _ws_broadcast(session.session_id, {
-        "type": "intent_classified",
-        "intent": intent.value,
-        "confidence": confidence,
-        "reasoning": reasoning,
-        "sentiment": sentiment,
-        "supervisor_ms": supervisor_ms,
-    })
+    await _ws_broadcast(session.session_id, {"type": "intent_classified", "intent": intent.value,
+                                               "confidence": confidence, "priority": priority.value})
 
-    # 2. Route to specialist agent
-    member = session.member_data
+    # Route to specialist
     agent_kwargs = dict(
         messages=conversation_history,
         member_id=session.member_id,
-        member_name=member.get("name", ""),
-        policy_number=member.get("policy_number", ""),
-        policy_type=member.get("policy_type", ""),
+        member_name=session.member_data.get("name", ""),
     )
 
     if intent == Intent.ESCALATE:
-        agent_response = _handle_escalation(session, conversation_history)
-    elif intent == Intent.ELIGIBILITY:
-        agent_response = run_eligibility_agent(**agent_kwargs)
-    elif intent == Intent.FNOL:
-        agent_response = run_fnol_agent(**agent_kwargs)
+        from backend.tools.claims_api import escalate_to_human
+        from backend.models import AgentResponse, ToolCall
+        result = escalate_to_human("Client requested human agent", "Chat escalation")
+        agent_response = AgentResponse(
+            text=result["message"], intent=Intent.ESCALATE, agent_name="escalation_handler",
+            tools_called=[ToolCall("escalate_to_human", {"reason": "client_request"}, result)],
+            escalated=True, escalation_reason="client_request",
+        )
+    elif intent in FNOL_INTENTS:
+        agent_response = run_fnol_agent(**agent_kwargs, intent=intent)
     elif intent == Intent.CLAIM_STATUS:
         agent_response = run_claims_agent(**agent_kwargs)
+    elif intent == Intent.POLICY_QUESTION:
+        agent_response = run_policy_lookup_agent(**agent_kwargs)
     else:
-        # General — run with all tools
-        agent_response = _handle_general(session, conversation_history, agent_kwargs)
+        # General, billing, COI — use general handler
+        system_prompt = f"""You are the ClaimFlow AI assistant for Prairie Shield Insurance Group in Omaha, Nebraska.
 
-    # Merge trace steps
-    all_trace_steps = trace_steps + agent_response.trace_steps
+Client: {agent_kwargs['member_name']}
 
-    # Add PII guardrail trace step if PII was detected in the user message
-    if pii_found:
-        all_trace_steps.insert(0, TraceStep(
-            name="PII Detection",
-            step_type="guardrail",
-            duration_ms=0,
-            status="warning",
-            details={"pii_types": [p["type"] for p in pii_found], "action": "redacted_in_logs"},
-        ))
+You can help with:
+- Filing new claims (FNOL)
+- Checking claim status
+- Looking up policy information
+- Answering insurance questions
 
-    # Guardrails trace — response validation
-    guardrail_start = time.time()
+If the client wants to file a claim, help them get started.
+If they need a Certificate of Insurance (COI) or have billing questions, let them know those features are coming soon and offer to connect them with a CSR.
+Use search_knowledge_base for general insurance questions.
+"""
+        tools = [TOOL_DEFINITIONS["search_knowledge_base"], TOOL_DEFINITIONS["lookup_client"]]
+        agent_response = run_agent_loop(
+            system_prompt=system_prompt, messages=conversation_history,
+            tools=tools, agent_name="general_agent", intent=intent,
+        )
+
+    # Build response trace
+    all_trace = trace_steps + [
+        {"name": ts.name, "step_type": ts.step_type, "duration_ms": ts.duration_ms,
+         "status": ts.status, "details": ts.details}
+        for ts in agent_response.trace_steps
+    ]
+
+    # Response guardrails
     is_valid, resp_confidence = validate_response(agent_response.text)
-    guardrail_ms = int((time.time() - guardrail_start) * 1000)
-    all_trace_steps.append(TraceStep(
-        name="Response Guardrails",
-        step_type="guardrail",
-        duration_ms=guardrail_ms,
-        status="success" if is_valid else "warning",
-        details={"valid": is_valid, "confidence": round(resp_confidence, 2)},
-    ))
-    if not is_valid:
-        agent_response.confidence = resp_confidence
+    all_trace.append({"name": "Response Guardrails", "step_type": "guardrail", "duration_ms": 0,
+                       "status": "success" if is_valid else "warning",
+                       "details": {"valid": is_valid, "confidence": round(resp_confidence, 2)}})
 
-    # Update session state
     session.current_intent = intent.value
     session.current_agent = agent_response.agent_name
     session.add_message("assistant", agent_response.text)
@@ -302,60 +607,19 @@ async def chat(req: ChatRequest):
     if agent_response.escalated:
         session.escalated = True
 
-    for tc in agent_response.tools_called:
-        session.tools_called.append(tc.tool_name)
-
-    # Store full RAG data in session for agent desktop
-    for rs in agent_response.rag_sources:
-        session.rag_history.append({
-            "source_doc": rs.source_doc,
-            "heading": rs.heading,
-            "chunk_text": rs.chunk_text,
-            "relevance_score": rs.relevance_score,
-            "turn": session.turn_count,
-            "intent": intent.value,
-        })
-
-    # Build handoff context if escalated
-    handoff_ctx = None
-    if agent_response.escalated:
-        handoff_ctx = HandoffContext(
-            summary=agent_response.escalation_reason,
-            intent=intent.value,
-            actions_taken=[tc.tool_name for tc in agent_response.tools_called],
-            open_questions=[],
-            retrieved_docs=[rs.source_doc for rs in agent_response.rag_sources],
-            sentiment=sentiment,
-        )
-        all_trace_steps.append(TraceStep(
-            name="Escalation Handoff",
-            step_type="escalation",
-            details={"reason": agent_response.escalation_reason, "sentiment": sentiment},
-        ))
-
-    # Compute latency breakdown
     latency = int((time.time() - start_time) * 1000)
     tools_ms = sum(tc.duration_ms for tc in agent_response.tools_called)
-    generation_ms = max(0, latency - supervisor_ms - tools_ms - guardrail_ms)
-    latency_breakdown = {
-        "classification_ms": supervisor_ms,
-        "tools_ms": tools_ms,
-        "generation_ms": generation_ms,
-        "guardrails_ms": guardrail_ms,
-    }
 
-    # Flag for review queue if low confidence
-    if agent_response.confidence < 0.7:
-        session.review_queue.append({
-            "turn": session.turn_count,
-            "intent": intent.value,
-            "confidence": round(agent_response.confidence, 2),
-            "response_preview": agent_response.text[:150],
-            "reason": "low_confidence",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+    tools_data = [
+        {"tool": tc.tool_name, "input": tc.tool_input, "output": tc.tool_output, "duration_ms": tc.duration_ms}
+        for tc in agent_response.tools_called
+    ]
+    rag_data = [
+        {"source_doc": rs.source_doc, "heading": rs.heading, "chunk_text": rs.chunk_text, "relevance_score": rs.relevance_score}
+        for rs in agent_response.rag_sources
+    ]
 
-    # Audit log
+    # Audit
     audit = AuditEntry(
         timestamp=datetime.now(timezone.utc).isoformat(),
         session_id=session.session_id,
@@ -371,56 +635,9 @@ async def chat(req: ChatRequest):
         sentiment=sentiment,
     )
     session.add_audit_entry(audit)
-    logger.info(f"[Audit] Turn {session.turn_count}: {intent.value} → {agent_response.agent_name} | sentiment={sentiment} ({latency}ms)")
 
-    # Update live analytics
-    _live_analytics["intents"][intent.value] = _live_analytics["intents"].get(intent.value, 0) + 1
-    _live_analytics["sentiments"][sentiment] = _live_analytics["sentiments"].get(sentiment, 0) + 1
-    for tc in agent_response.tools_called:
-        _live_analytics["tools"][tc.tool_name] = _live_analytics["tools"].get(tc.tool_name, 0) + 1
-    _live_analytics["total_turns"] += 1
-    _live_analytics["total_latency_ms"] += latency
-    if agent_response.escalated:
-        _live_analytics["escalation_count"] += 1
-
-    # Serialize for response
-    tools_data = [
-        {"tool": tc.tool_name, "input": tc.tool_input, "output": tc.tool_output, "duration_ms": tc.duration_ms}
-        for tc in agent_response.tools_called
-    ]
-    rag_data = [
-        {"source_doc": rs.source_doc, "heading": rs.heading, "chunk_text": rs.chunk_text, "relevance_score": rs.relevance_score}
-        for rs in agent_response.rag_sources
-    ]
-    trace_data = [
-        {"name": ts.name, "step_type": ts.step_type, "duration_ms": ts.duration_ms, "status": ts.status, "details": ts.details}
-        for ts in all_trace_steps
-    ]
-    handoff_data = None
-    if handoff_ctx:
-        handoff_data = {
-            "summary": handoff_ctx.summary,
-            "intent": handoff_ctx.intent,
-            "actions_taken": handoff_ctx.actions_taken,
-            "open_questions": handoff_ctx.open_questions,
-            "retrieved_docs": handoff_ctx.retrieved_docs,
-            "sentiment": handoff_ctx.sentiment,
-        }
-
-    # Broadcast completion
-    await _ws_broadcast(session.session_id, {
-        "type": "response_ready",
-        "response": agent_response.text,
-        "intent": intent.value,
-        "agent": agent_response.agent_name,
-        "tools_called": tools_data,
-        "rag_sources": rag_data,
-        "trace_steps": trace_data,
-        "escalated": agent_response.escalated,
-        "handoff_context": handoff_data,
-        "sentiment": sentiment,
-        "latency_ms": latency,
-    })
+    await _ws_broadcast(session.session_id, {"type": "response_ready", "response": agent_response.text,
+                                               "intent": intent.value, "latency_ms": latency})
 
     return ChatResponse(
         response=agent_response.text,
@@ -428,444 +645,38 @@ async def chat(req: ChatRequest):
         agent=agent_response.agent_name,
         tools_called=tools_data,
         rag_sources=rag_data,
-        trace_steps=trace_data,
+        trace_steps=all_trace,
         escalated=agent_response.escalated,
         escalation_reason=agent_response.escalation_reason,
-        handoff_context=handoff_data,
         confidence=agent_response.confidence,
         sentiment=sentiment,
+        priority=priority.value,
         latency_ms=latency,
-        latency_breakdown=latency_breakdown,
+        latency_breakdown={"classification_ms": sup_ms, "tools_ms": tools_ms,
+                           "generation_ms": max(0, latency - sup_ms - tools_ms)},
         guardrail_flags=guardrail_flags,
     )
 
 
-def _handle_escalation(session, conversation_history):
-    """Handle escalation intent."""
-    from backend.tools.claims_api import escalate_to_human
-    from backend.models import AgentResponse, ToolCall
-
-    summary = " | ".join(
-        f"{m['role']}: {m['content'][:80]}" for m in conversation_history[-6:]
-    )
-    result = escalate_to_human("Member requested human agent", summary)
-    return AgentResponse(
-        text=result["message"],
-        intent=Intent.ESCALATE,
-        agent_name="escalation_handler",
-        tools_called=[ToolCall("escalate_to_human", {"reason": "member_request"}, result)],
-        escalated=True,
-        escalation_reason="member_request",
-    )
-
-
-def _handle_general(session, conversation_history, agent_kwargs):
-    """Handle general intent with a friendly response."""
-    system_prompt = f"""You are the Octank Insurance virtual assistant. You're friendly, professional, and helpful.
-
-Member: {agent_kwargs['member_name']} (ID: {agent_kwargs['member_id']})
-Policy: {agent_kwargs['policy_number']}
-
-You can help with:
-- Checking coverage and eligibility
-- Filing a new claim (FNOL)
-- Checking claim status
-- Answering questions about their policy
-
-If the member greets you, welcome them warmly and let them know what you can help with.
-If you're unsure what they need, ask a clarifying question.
-Use search_knowledge_base if they ask general policy questions.
-"""
-    tools = [TOOL_DEFINITIONS["search_knowledge_base"], TOOL_DEFINITIONS["schedule_callback"]]
-    return run_agent_loop(
-        system_prompt=system_prompt,
-        messages=conversation_history,
-        tools=tools,
-        agent_name="general_agent",
-        intent=Intent.GENERAL,
-    )
-
-
-# ── Agent Desktop ─────────────────────────────────────────────────────
-
-_haiku_client = AnthropicBedrock(aws_region=AWS_REGION)
-
-
-def _tool_description(tool_name: str) -> str:
-    """Human-readable description of a tool action."""
-    descriptions = {
-        "get_eligibility": "Checked member coverage and eligibility details",
-        "get_claim_status": "Retrieved claim status and timeline",
-        "create_fnol": "Filed a First Notice of Loss claim",
-        "search_knowledge_base": "Searched policy knowledge base",
-        "escalate_to_human": "Escalated conversation to human agent",
-        "schedule_callback": "Scheduled a callback for the member",
-    }
-    return descriptions.get(tool_name, f"Called {tool_name}")
-
-
-def _generate_conversation_summary(session) -> str:
-    """Use Haiku to generate a concise agent briefing."""
-    convo = "\n".join(
-        f"{m['role'].upper()}: {m['content']}" for m in session.messages
-    )
-    prompt = f"""You are preparing a briefing for a human insurance agent who is about to take over this conversation.
-
-Member: {session.member_data.get('name', 'Unknown')} (ID: {session.member_id})
-Policy: {session.member_data.get('policy_number', 'N/A')} ({session.member_data.get('policy_type', 'N/A')})
-
-Conversation:
-{convo}
-
-Sentiment progression: {', '.join(session.sentiment_history) if session.sentiment_history else 'neutral'}
-
-Write a 3-5 sentence briefing covering:
-1. WHO the member is and their policy type
-2. WHAT they needed help with
-3. WHAT the AI agent did (tools used, information provided)
-4. WHAT is still unresolved or why they were escalated
-5. The member's EMOTIONAL STATE
-
-Be concise and actionable. Write in third person."""
-
-    try:
-        resp = _haiku_client.messages.create(
-            model=SUPERVISOR_MODEL_ID,
-            max_tokens=400,
-            temperature=0.2,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return resp.content[0].text.strip()
-    except Exception as e:
-        logger.error(f"Summary generation failed: {e}")
-        summary_parts = []
-        for m in session.messages[-6:]:
-            summary_parts.append(f"{m['role']}: {m['content'][:80]}")
-        return "AI summary unavailable. Recent conversation: " + " | ".join(summary_parts)
-
-
-def _generate_agent_guidance(session) -> tuple:
-    """Use Haiku to generate suggested actions and open questions in a single call."""
-    convo = "\n".join(
-        f"{m['role'].upper()}: {m['content']}" for m in session.messages[-10:]
-    )
-    tools_used = ", ".join(session.tools_called) if session.tools_called else "none"
-
-    prompt = f"""You are an AI assistant helping a human insurance agent prepare to handle this conversation.
-
-Member: {session.member_data.get('name', 'Unknown')}
-Policy type: {session.member_data.get('policy_type', 'N/A')}
-Tools already used by AI: {tools_used}
-Current intent: {session.current_intent}
-
-Recent conversation:
-{convo}
-
-Provide TWO sections in valid JSON format:
-
-{{
-  "suggested_actions": [
-    "3-5 specific, actionable next steps the human agent should take"
-  ],
-  "open_questions": [
-    "2-4 unresolved items or questions the agent should address"
-  ]
-}}
-
-Be specific to this member's situation. Use imperative verbs (e.g., "Review...", "Confirm...", "Offer...")."""
-
-    try:
-        resp = _haiku_client.messages.create(
-            model=SUPERVISOR_MODEL_ID,
-            max_tokens=500,
-            temperature=0.2,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = resp.content[0].text.strip()
-        # Extract JSON from response
-        start = text.find("{")
-        end = text.rfind("}") + 1
-        if start >= 0 and end > start:
-            data = json.loads(text[start:end])
-            return (
-                data.get("suggested_actions", []),
-                data.get("open_questions", []),
-            )
-    except Exception as e:
-        logger.error(f"Guidance generation failed: {e}")
-
-    return (
-        ["Review conversation history", "Address member's primary concern", "Check if additional follow-up needed"],
-        ["What is the member's primary unresolved issue?"],
-    )
-
-
-def _do_contextual_knowledge_retrieval(session) -> list:
-    """Retrieve policy docs based on conversation context when the AI didn't call search_knowledge_base."""
-    # Build query from both user messages and the conversation intent
-    user_messages = [m["content"] for m in session.messages if m["role"] == "user"]
-    intent_terms = {
-        "eligibility": "coverage eligibility deductible benefits",
-        "fnol": "claim filing accident loss damage",
-        "claim_status": "claim status timeline adjuster",
-        "general": "",
-        "escalate": "",
-    }
-    boost = intent_terms.get(session.current_intent, "")
-    query = " ".join(user_messages[-5:]) + " " + boost
-
-    if not query.strip():
-        return []
-
-    results = retriever.search(query.strip(), top_k=5)
-    return [
-        {
-            "source_doc": r["source_doc"],
-            "heading": r.get("heading", ""),
-            "chunk_text": r["chunk_text"],
-            "relevance_score": r["relevance_score"],
-            "turn": 0,
-            "intent": session.current_intent,
-        }
-        for r in results
-    ]
-
-
-def _do_proactive_knowledge_retrieval(session) -> list:
-    """Run a fresh RAG search using full conversation context — returns full chunk text."""
-    # Build a rich query from the conversation
-    user_messages = [m["content"] for m in session.messages if m["role"] == "user"]
-    query = " ".join(user_messages[-5:])  # Last 5 user messages as context
-
-    if not query.strip():
-        return []
-
-    results = retriever.search(query, top_k=6)
-    return [
-        {
-            "source_doc": r["source_doc"],
-            "heading": r.get("heading", ""),
-            "chunk_text": r["chunk_text"],  # Full text, not truncated
-            "relevance_score": r["relevance_score"],
-        }
-        for r in results
-    ]
-
-
-@app.get("/api/agent-desktop/{session_id}", response_model=AgentDesktopResponse)
-async def get_agent_desktop(session_id: str):
-    """Assemble full agent context package for the human agent desktop."""
-    session = session_manager.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found or expired")
-
-    start_time = time.time()
-
-    # Run LLM calls and proactive RAG in parallel
-    loop = asyncio.get_event_loop()
-    summary_future = loop.run_in_executor(None, _generate_conversation_summary, session)
-    guidance_future = loop.run_in_executor(None, _generate_agent_guidance, session)
-    knowledge_future = loop.run_in_executor(None, _do_proactive_knowledge_retrieval, session)
-
-    ai_summary, (suggested_actions, open_questions), proactive_knowledge = await asyncio.gather(
-        summary_future, guidance_future, knowledge_future
-    )
-
-    # Build actions taken from audit log
-    actions_taken = []
-    for entry in session.audit_log:
-        for tool_name in entry.get("tools_called", []):
-            actions_taken.append({
-                "tool": tool_name,
-                "description": _tool_description(tool_name),
-                "turn": entry.get("turn", 0),
-                "intent": entry.get("intent", ""),
-            })
-
-    # Collect knowledge retrieved during chat (full RAG data from session)
-    # If the AI agent didn't call search_knowledge_base (common for eligibility/FNOL/claims
-    # flows that use specific tools), do a contextual retrieval so the human agent still
-    # sees relevant policy documents in the Retrieved tab.
-    if session.rag_history:
-        knowledge_retrieved = [
-            {
-                "source_doc": r["source_doc"],
-                "heading": r.get("heading", ""),
-                "chunk_text": r["chunk_text"],
-                "relevance_score": r["relevance_score"],
-                "turn": r.get("turn", 0),
-                "intent": r.get("intent", ""),
-            }
-            for r in session.rag_history
-        ]
-    else:
-        # Contextual retrieval: search using conversation topics
-        knowledge_retrieved = await loop.run_in_executor(
-            None, _do_contextual_knowledge_retrieval, session
-        )
-
-    # Current sentiment
-    current_sentiment = session.sentiment_history[-1] if session.sentiment_history else "neutral"
-
-    # Escalation details
-    escalation = {}
-    if session.escalated:
-        escalation = {
-            "escalated": True,
-            "reason": next(
-                (e.get("intent", "") for e in reversed(session.audit_log) if "escalate" in str(e.get("tools_called", []))),
-                session.current_intent,
-            ),
-            "turn": session.turn_count,
-            "timestamp": session.audit_log[-1].get("timestamp", "") if session.audit_log else "",
-        }
-
-    latency = int((time.time() - start_time) * 1000)
-    logger.info(f"[AgentDesktop] Context assembled for {session_id} in {latency}ms")
-
-    return AgentDesktopResponse(
-        session_id=session.session_id,
-        member=session.member_data,
-        sentiment_history=session.sentiment_history,
-        current_sentiment=current_sentiment,
-        conversation=session.messages,
-        ai_summary=ai_summary,
-        actions_taken=actions_taken,
-        knowledge_retrieved=knowledge_retrieved,
-        knowledge_proactive=proactive_knowledge,
-        suggested_actions=suggested_actions,
-        open_questions=open_questions,
-        escalation=escalation,
-        session_meta={
-            "created_at": session.created_at,
-            "turn_count": session.turn_count,
-            "current_intent": session.current_intent,
-            "current_agent": session.current_agent,
-            "tools_used_count": len(session.tools_called),
-            "assembly_ms": latency,
-        },
-    )
-
-
-# ── Analytics & Review Queue ──────────────────────────────────────────
-
-@app.get("/api/analytics")
-def get_analytics():
-    """Return analytics data — mock historical baseline + live session metrics."""
-    sessions = session_manager.list_sessions()
-    live = _live_analytics
-
-    # Merge live counts onto mock baselines
-    mock_intents = {"eligibility": 412, "fnol": 287, "claim_status": 334, "general": 156, "escalate": 58}
-    merged_intents = {k: mock_intents.get(k, 0) + live["intents"].get(k, 0) for k in mock_intents}
-    total_conv = 1247 + live["total_sessions"]
-
-    mock_tools = {"search_knowledge_base": 567, "get_eligibility": 398, "get_claim_status": 312,
-                  "create_fnol": 189, "schedule_callback": 78, "escalate_to_human": 58}
-    merged_tools = {k: mock_tools.get(k, 0) + live["tools"].get(k, 0) for k in mock_tools}
-    # Include any tools only seen in live data
-    for k, v in live["tools"].items():
-        if k not in merged_tools:
-            merged_tools[k] = v
-
-    mock_sentiments = {"positive": 42, "neutral": 38, "concerned": 12, "frustrated": 6, "angry": 2}
-    total_live_sentiments = sum(live["sentiments"].values()) or 1
-    merged_escalations = 58 + live["escalation_count"]
-
-    # Use fixed realistic KPIs — small live deltas won't skew them
-    base_containment = 73  # Realistic for insurance vertical
-    base_escalation_rate = 8
-    # Live escalations only nudge slightly
-    live_esc = live["escalation_count"]
-    adj_containment = max(60, base_containment - live_esc)
-    adj_escalation = min(25, base_escalation_rate + live_esc)
-
-    # Sentiment: fixed realistic percentages, live data shown as a separate field
-    sentiment_pcts = {"positive": 42, "neutral": 38, "concerned": 12, "frustrated": 6, "angry": 2}
-
-    return {
-        "containment_rate": adj_containment,
-        "total_conversations": total_conv,
-        "avg_handle_time_seconds": 142,
-        "escalation_rate": adj_escalation,
-        "csat_score": 4.2,
-        "first_contact_resolution": 68,
-        "intent_distribution": [
-            {"intent": k, "count": v, "pct": round(v / max(sum(merged_intents.values()), 1) * 100)}
-            for k, v in merged_intents.items()
-        ],
-        "avg_handle_time_by_intent": [
-            {"intent": "eligibility", "seconds": 95},
-            {"intent": "fnol", "seconds": 210},
-            {"intent": "claim_status", "seconds": 120},
-            {"intent": "general", "seconds": 45},
-        ],
-        "escalation_reasons": [
-            {"reason": "Member request", "count": 22 + live_esc},
-            {"reason": "Injury reported", "count": 15},
-            {"reason": "Complex claim", "count": 12},
-            {"reason": "System limitation", "count": 6},
-            {"reason": "Frustrated member", "count": 3},
-        ],
-        "tool_call_frequency": [
-            {"tool": k, "count": v} for k, v in sorted(merged_tools.items(), key=lambda x: -x[1])
-        ],
-        "daily_volume": [
-            {"day": "Mon", "count": 198},
-            {"day": "Tue", "count": 234},
-            {"day": "Wed", "count": 212},
-            {"day": "Thu", "count": 187},
-            {"day": "Fri", "count": 241},
-            {"day": "Sat", "count": 98},
-            {"day": "Sun", "count": 77},
-        ],
-        "sentiment_distribution": [
-            {"sentiment": k, "pct": v}
-            for k, v in sentiment_pcts.items()
-        ],
-        "hourly_pattern": [
-            {"hour": "8am", "count": 45}, {"hour": "9am", "count": 112},
-            {"hour": "10am", "count": 156}, {"hour": "11am", "count": 134},
-            {"hour": "12pm", "count": 98}, {"hour": "1pm", "count": 123},
-            {"hour": "2pm", "count": 145}, {"hour": "3pm", "count": 167},
-            {"hour": "4pm", "count": 132}, {"hour": "5pm", "count": 78},
-        ],
-        "active_sessions": len(sessions),
-        "live_session_turns": live["total_turns"],
-    }
-
-
-@app.get("/api/review-queue/{session_id}")
-def get_review_queue(session_id: str):
-    """Return flagged responses for human review."""
-    session = session_manager.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return {"items": session.review_queue}
-
-
 # ── WebSocket ─────────────────────────────────────────────────────────
 
-@app.websocket("/ws/{session_id}")
-async def websocket_endpoint(websocket: WebSocket, session_id: str):
+@app.websocket("/ws/{channel}")
+async def websocket_endpoint(websocket: WebSocket, channel: str):
     await websocket.accept()
-
-    if session_id not in ws_connections:
-        ws_connections[session_id] = []
-    ws_connections[session_id].append(websocket)
-
+    if channel not in ws_connections:
+        ws_connections[channel] = []
+    ws_connections[channel].append(websocket)
     try:
         while True:
-            await websocket.receive_text()  # Keep connection alive
+            await websocket.receive_text()
     except WebSocketDisconnect:
-        ws_connections[session_id].remove(websocket)
-        if not ws_connections[session_id]:
-            del ws_connections[session_id]
+        ws_connections[channel].remove(websocket)
+        if not ws_connections[channel]:
+            del ws_connections[channel]
 
 
-async def _ws_broadcast(session_id: str, data: dict):
-    """Broadcast a message to all WebSocket connections for a session."""
-    connections = ws_connections.get(session_id, [])
+async def _ws_broadcast(channel: str, data: dict):
+    connections = ws_connections.get(channel, [])
     for ws in connections:
         try:
             await ws.send_json(data)
@@ -873,7 +684,7 @@ async def _ws_broadcast(session_id: str, data: dict):
             pass
 
 
-# ── Static files (frontend) ──────────────────────────────────────────
+# ── Static files ──────────────────────────────────────────────────────
 
 if FRONTEND_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")

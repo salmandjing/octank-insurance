@@ -1,67 +1,126 @@
 {
   "claims": {
-    "CLM-2024-001": {
-      "claim_id": "CLM-2024-001",
-      "member_id": "M-10043",
-      "policy_number": "POL-2024-78433",
+    "CLM-2024-0891": {
+      "id": "CLM-2024-0891",
+      "client_id": "CLI-1008",
+      "policy_id": "POL-HO-2024-003",
+      "carrier": "Westfield Insurance",
+      "carrier_id": "CARRIER-WF",
+      "type": "homeowners",
+      "peril": "hail",
+      "date_of_loss": "2024-06-14",
+      "date_reported": "2024-06-15",
       "status": "under_review",
-      "type": "collision",
-      "filed_date": "2024-11-15",
-      "date_of_loss": "2024-11-14",
-      "description": "Rear-ended at a red light on Highway 26. Other driver ran into back of vehicle at approximately 25 mph.",
-      "location": "Highway 26 & Cedar Blvd, Portland, OR",
-      "injuries": false,
-      "police_report_number": "PPD-2024-44521",
-      "estimated_damage": 4200.00,
-      "adjuster": {
-        "name": "Patricia Martinez",
-        "phone": "555-800-1234",
-        "email": "p.martinez@octankinsurance.com"
-      },
+      "description": "Severe hail storm hit Grand Island area. Quarter-sized hail for approximately 20 minutes. Roof damage — missing and cracked shingles visible. Dents on north-facing aluminum siding. Two skylights cracked. Gutter damage on east side. No interior water damage yet but concerned about next rain.",
+      "adjuster": {"name": "Pat Greenfield", "phone": "(402) 555-9012", "email": "pgreenfield@westfield.com"},
+      "estimated_damage": 18500,
+      "police_report": false,
+      "photos_submitted": true,
       "timeline": [
-        {"date": "2024-11-15", "event": "Claim filed", "status": "completed"},
-        {"date": "2024-11-16", "event": "Adjuster assigned", "status": "completed"},
-        {"date": "2024-11-18", "event": "Vehicle inspection scheduled", "status": "completed"},
-        {"date": "2024-11-20", "event": "Inspection completed - damage assessed at $4,200", "status": "completed"},
-        {"date": "2024-11-25", "event": "Liability determination in progress", "status": "in_progress"},
-        {"date": "2024-12-05", "event": "Expected resolution", "status": "pending"}
-      ],
-      "next_steps": [
-        "Liability determination is being finalized — the other driver's insurer has been contacted",
-        "Once liability is confirmed, repair authorization will be issued",
-        "You can take your vehicle to any approved repair shop in our network"
+        {"date": "2024-06-15", "event": "FNOL submitted by agency"},
+        {"date": "2024-06-16", "event": "Adjuster assigned"},
+        {"date": "2024-06-18", "event": "Inspection scheduled for 6/20"},
+        {"date": "2024-06-20", "event": "Inspection completed. Roof replacement recommended."},
+        {"date": "2024-06-22", "event": "Estimate sent to insured. Pending approval."}
       ]
     },
-    "CLM-2024-002": {
-      "claim_id": "CLM-2024-002",
-      "member_id": "M-10044",
-      "policy_number": "POL-2024-78434",
-      "status": "approved",
-      "type": "comprehensive",
-      "filed_date": "2024-10-03",
-      "date_of_loss": "2024-10-01",
-      "description": "Hail damage to vehicle during severe storm. Multiple dents on hood, roof, and trunk. Windshield cracked.",
-      "location": "456 Maple Drive, Austin, TX",
-      "injuries": false,
-      "police_report_number": null,
-      "estimated_damage": 6800.00,
-      "approved_amount": 6550.00,
-      "adjuster": {
-        "name": "Robert Kim",
-        "phone": "555-800-5678",
-        "email": "r.kim@octankinsurance.com"
-      },
+    "CLM-2024-1204": {
+      "id": "CLM-2024-1204",
+      "client_id": "CLI-1001",
+      "policy_id": "POL-PA-2024-001",
+      "carrier": "Auto-Owners Insurance",
+      "carrier_id": "CARRIER-AO",
+      "type": "personal_auto",
+      "peril": "collision",
+      "date_of_loss": "2024-11-02",
+      "date_reported": "2024-11-02",
+      "status": "open",
+      "description": "Rear-ended at stoplight on 72nd and Dodge. Other driver ran red light. Police report filed. No injuries. Bumper damage and possible frame misalignment. Other driver insured — State Farm policy. Other driver's info: Maria Gonzales, State Farm policy SF-4412876.",
+      "adjuster": null,
+      "estimated_damage": 4200,
+      "police_report": true,
+      "police_report_number": "OPD-2024-889431",
+      "photos_submitted": false,
       "timeline": [
-        {"date": "2024-10-03", "event": "Claim filed", "status": "completed"},
-        {"date": "2024-10-04", "event": "Adjuster assigned", "status": "completed"},
-        {"date": "2024-10-07", "event": "Vehicle inspection completed", "status": "completed"},
-        {"date": "2024-10-10", "event": "Claim approved - $6,550 authorized", "status": "completed"},
-        {"date": "2024-10-12", "event": "Payment issued to member", "status": "completed"}
-      ],
-      "next_steps": [
-        "Payment of $6,550 has been issued to your account",
-        "You may proceed with repairs at any shop of your choice",
-        "Submit final repair receipts for our records"
+        {"date": "2024-11-02", "event": "FNOL submitted by agency"}
+      ]
+    },
+    "CLM-2024-0673": {
+      "id": "CLM-2024-0673",
+      "client_id": "CLI-1004",
+      "policy_id": "POL-FR-2024-001",
+      "carrier": "Grinnell Mutual",
+      "carrier_id": "CARRIER-GRIN",
+      "type": "farm_ranch",
+      "peril": "wind",
+      "date_of_loss": "2024-08-28",
+      "date_reported": "2024-08-29",
+      "status": "approved",
+      "description": "Straight-line winds from severe thunderstorm. Estimated 70-80 mph. Older barn partially collapsed. Two grain bins dented, one with roof damage. Fence line down along highway 81. 12 head of cattle got out, all recovered. No injuries.",
+      "adjuster": {"name": "Steve Holman", "phone": "(515) 555-3456", "email": "sholman@grinnellmutual.com"},
+      "estimated_damage": 67000,
+      "approved_amount": 61500,
+      "police_report": false,
+      "photos_submitted": true,
+      "timeline": [
+        {"date": "2024-08-29", "event": "FNOL submitted by agency"},
+        {"date": "2024-08-29", "event": "Adjuster assigned — expedited due to livestock safety concern"},
+        {"date": "2024-08-30", "event": "Field inspection completed"},
+        {"date": "2024-09-05", "event": "Estimate finalized: $67,000"},
+        {"date": "2024-09-08", "event": "Claim approved: $61,500 after deductible and depreciation"},
+        {"date": "2024-09-12", "event": "Payment issued"}
+      ]
+    },
+    "CLM-2025-0042": {
+      "id": "CLM-2025-0042",
+      "client_id": "CLI-1007",
+      "policy_id": "POL-CA-2024-002",
+      "carrier": "EMC Insurance (EMCASCO)",
+      "carrier_id": "CARRIER-EMC",
+      "type": "commercial_auto",
+      "peril": "collision",
+      "date_of_loss": "2025-01-15",
+      "date_reported": "2025-01-15",
+      "status": "open",
+      "description": "Company truck (unit 7, 2021 Freightliner Cascadia) jackknifed on I-80 near Kearney during ice storm. Driver Randy Becker Jr. Minor injuries — treated and released at CHI Good Samaritan. Truck towed to TA Petro in Kearney. Trailer load of farm equipment — shipper notified. DOT report filed.",
+      "adjuster": {"name": "Julie Kimball", "phone": "(515) 555-7890", "email": "jkimball@emcins.com"},
+      "estimated_damage": 45000,
+      "police_report": true,
+      "police_report_number": "NSP-2025-00412",
+      "injuries": true,
+      "injury_description": "Driver — bruised ribs, minor lacerations. Treated at CHI Good Samaritan, Kearney. Released same day.",
+      "photos_submitted": true,
+      "timeline": [
+        {"date": "2025-01-15", "event": "FNOL submitted by agency. Flagged high priority — injuries and commercial vehicle."},
+        {"date": "2025-01-15", "event": "Adjuster assigned within 2 hours"},
+        {"date": "2025-01-16", "event": "Adjuster inspected vehicle at TA Petro Kearney"},
+        {"date": "2025-01-17", "event": "Cargo claim opened separately under motor truck cargo policy"}
+      ]
+    },
+    "CLM-2024-0445": {
+      "id": "CLM-2024-0445",
+      "client_id": "CLI-1006",
+      "policy_id": "POL-PA-2024-004",
+      "carrier": "Auto-Owners Insurance",
+      "carrier_id": "CARRIER-AO",
+      "type": "personal_auto",
+      "peril": "comprehensive",
+      "date_of_loss": "2024-12-20",
+      "date_reported": "2024-12-21",
+      "status": "closed",
+      "description": "Catalytic converter stolen from vehicle while parked at apartment complex on Vinton Street overnight. Discovered in the morning when vehicle was extremely loud on startup.",
+      "adjuster": {"name": "Dan Novotny", "phone": "(402) 555-4567", "email": "dnovotny@auto-owners.com"},
+      "estimated_damage": 2800,
+      "approved_amount": 2550,
+      "police_report": true,
+      "police_report_number": "OPD-2024-912345",
+      "photos_submitted": true,
+      "timeline": [
+        {"date": "2024-12-21", "event": "FNOL submitted by agency"},
+        {"date": "2024-12-22", "event": "Adjuster assigned"},
+        {"date": "2024-12-23", "event": "Phone inspection completed — straightforward comp claim"},
+        {"date": "2024-12-27", "event": "Claim approved: $2,550 after $250 deductible"},
+        {"date": "2024-12-30", "event": "Payment issued. Claim closed."}
       ]
     }
   }

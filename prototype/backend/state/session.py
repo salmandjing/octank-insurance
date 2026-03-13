@@ -1,23 +1,72 @@
+"""Session and data management for ClaimFlow AI."""
 from __future__ import annotations
 import uuid
 import json
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from typing import Any
 
 from backend.config import DATA_DIR, SESSION_TIMEOUT_MINUTES
-from backend.models import Message, AuditEntry
+from backend.models import AuditEntry, FNOLExtraction, ClaimStatus
 
-# Load member data
-_members_path = DATA_DIR / "members.json"
-with open(_members_path) as f:
-    MEMBERS_DB: dict[str, Any] = json.load(f)["members"]
 
-_claims_path = DATA_DIR / "claims.json"
-with open(_claims_path) as f:
-    CLAIMS_DB: dict[str, Any] = json.load(f)["claims"]
+def _load_json(filename: str) -> dict:
+    path = DATA_DIR / filename
+    with open(path) as f:
+        return json.load(f)
+
+
+def get_clients_db() -> dict[str, Any]:
+    return _load_json("clients.json")["clients"]
+
+
+def get_policies_db() -> dict[str, Any]:
+    return _load_json("policies.json")["policies"]
+
+
+def get_carriers_db() -> dict[str, Any]:
+    return _load_json("carriers.json")["carriers"]
+
+
+def get_claims_db() -> dict[str, Any]:
+    return _load_json("claims.json")["claims"]
+
+
+# In-memory claims store for new claims created during session
+_active_claims: dict[str, dict] = {}
+
+
+def get_all_claims() -> dict[str, Any]:
+    """Get claims from file + any created during this session."""
+    claims = get_claims_db()
+    claims.update(_active_claims)
+    return claims
+
+
+def add_active_claim(claim_id: str, claim_data: dict) -> None:
+    _active_claims[claim_id] = claim_data
+
+
+@dataclass
+class ClaimRecord:
+    """A claim being processed through the FNOL pipeline."""
+    claim_id: str
+    status: str = "new"
+    email_raw: str = ""
+    email_from: str = ""
+    email_subject: str = ""
+    extraction: dict = field(default_factory=dict)
+    policy_data: dict = field(default_factory=dict)
+    carrier_data: dict = field(default_factory=dict)
+    carrier_submission: str = ""
+    client_email: str = ""
+    followup_email: str = ""
+    priority: str = "normal"
+    trace_steps: list[dict] = field(default_factory=list)
+    created_at: str = ""
+    updated_at: str = ""
 
 
 @dataclass
@@ -36,8 +85,8 @@ class Session:
     fnol_data: dict[str, Any] = field(default_factory=dict)
     audit_log: list[dict] = field(default_factory=list)
     sentiment_history: list[str] = field(default_factory=list)
-    rag_history: list[dict] = field(default_factory=list)  # Full RAG results per turn
-    review_queue: list[dict] = field(default_factory=list)  # Flagged for human review
+    rag_history: list[dict] = field(default_factory=list)
+    review_queue: list[dict] = field(default_factory=list)
 
     @property
     def is_expired(self) -> bool:
@@ -67,20 +116,72 @@ class Session:
         return list(self.messages)
 
 
+class ClaimPipeline:
+    """Manages claims being processed through the FNOL pipeline."""
+
+    def __init__(self):
+        self._claims: dict[str, ClaimRecord] = {}
+
+    def create_claim(self, email_raw: str = "", email_from: str = "", email_subject: str = "") -> ClaimRecord:
+        claim_id = f"CF-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
+        now = datetime.now(timezone.utc).isoformat()
+        record = ClaimRecord(
+            claim_id=claim_id,
+            email_raw=email_raw,
+            email_from=email_from,
+            email_subject=email_subject,
+            created_at=now,
+            updated_at=now,
+        )
+        self._claims[claim_id] = record
+        return record
+
+    def get_claim(self, claim_id: str) -> ClaimRecord | None:
+        return self._claims.get(claim_id)
+
+    def list_claims(self) -> list[dict]:
+        return [
+            {
+                "claim_id": c.claim_id,
+                "status": c.status,
+                "email_from": c.email_from,
+                "email_subject": c.email_subject,
+                "priority": c.priority,
+                "loss_type": c.extraction.get("loss_type", ""),
+                "reporter_name": c.extraction.get("reporter_name", ""),
+                "policy_number": c.extraction.get("policy_number", ""),
+                "confidence": c.extraction.get("confidence_score", 0),
+                "created_at": c.created_at,
+            }
+            for c in sorted(self._claims.values(), key=lambda x: x.created_at, reverse=True)
+        ]
+
+    def update_claim(self, claim_id: str, **kwargs) -> ClaimRecord | None:
+        record = self._claims.get(claim_id)
+        if not record:
+            return None
+        for key, value in kwargs.items():
+            if hasattr(record, key):
+                setattr(record, key, value)
+        record.updated_at = datetime.now(timezone.utc).isoformat()
+        return record
+
+
 class SessionManager:
     def __init__(self):
         self._sessions: dict[str, Session] = {}
 
-    def create_session(self, member_id: str) -> Session:
-        if member_id not in MEMBERS_DB:
-            raise ValueError(f"Unknown member: {member_id}")
+    def create_session(self, client_id: str) -> Session:
+        clients = get_clients_db()
+        if client_id not in clients:
+            raise ValueError(f"Unknown client: {client_id}")
 
         session_id = f"sess_{uuid.uuid4().hex[:12]}"
         now = time.time()
         session = Session(
             session_id=session_id,
-            member_id=member_id,
-            member_data=MEMBERS_DB[member_id],
+            member_id=client_id,
+            member_data=clients[client_id],
             created_at=now,
             last_active=now,
         )
@@ -107,13 +208,16 @@ class SessionManager:
             if not s.is_expired
         ]
 
-    def get_members(self) -> list[dict[str, Any]]:
+    def get_clients(self) -> list[dict[str, Any]]:
+        clients = get_clients_db()
         return [
             {
-                "member_id": m["member_id"],
-                "name": m["name"],
-                "policy_number": m["policy_number"],
-                "policy_type": m["policy_type"],
+                "id": c.get("id", cid),
+                "name": c["name"],
+                "type": c.get("type", "personal"),
+                "email": c.get("email", ""),
+                "phone": c.get("phone", ""),
+                "agent": c.get("agent", ""),
             }
-            for m in MEMBERS_DB.values()
+            for cid, c in clients.items()
         ]

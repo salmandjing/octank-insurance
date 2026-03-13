@@ -1,0 +1,398 @@
+{
+  "policies": {
+    "POL-PA-2024-001": {
+      "id": "POL-PA-2024-001",
+      "client_id": "CLI-1001",
+      "type": "personal_auto",
+      "carrier": "Auto-Owners Insurance",
+      "carrier_id": "CARRIER-AO",
+      "policy_number": "AO-PA-8847321",
+      "effective_date": "2024-06-15",
+      "expiration_date": "2025-06-15",
+      "status": "active",
+      "vehicles": [
+        {
+          "year": 2022, "make": "Ford", "model": "F-150 XLT", "vin": "1FTFW1E85NFA12345",
+          "coverage": {
+            "liability": {"bi_per_person": 100000, "bi_per_accident": 300000, "pd": 100000},
+            "collision": {"deductible": 500},
+            "comprehensive": {"deductible": 250},
+            "uninsured_motorist": {"bi_per_person": 100000, "bi_per_accident": 300000},
+            "medical_payments": 5000
+          }
+        }
+      ],
+      "premium_annual": 1847.00,
+      "payment_plan": "monthly",
+      "drivers": [
+        {"name": "Tom Rezac", "license": "NE-A12345678", "dob": "1985-03-22", "relation": "insured"}
+      ]
+    },
+    "POL-HO-2024-001": {
+      "id": "POL-HO-2024-001",
+      "client_id": "CLI-1001",
+      "type": "homeowners",
+      "carrier": "Erie Insurance",
+      "carrier_id": "CARRIER-ERIE",
+      "policy_number": "ERIE-HO-Q442891",
+      "effective_date": "2024-04-01",
+      "expiration_date": "2025-04-01",
+      "status": "active",
+      "property": {
+        "address": "4821 Dodge St, Omaha, NE 68132",
+        "year_built": 1978, "sqft": 2400, "construction": "frame",
+        "roof_type": "architectural_shingle", "roof_year": 2019
+      },
+      "coverage": {
+        "dwelling": 340000, "other_structures": 34000, "personal_property": 170000,
+        "loss_of_use": 68000, "personal_liability": 300000, "medical_payments": 5000,
+        "deductible": 1000, "wind_hail_deductible": "2_percent"
+      },
+      "premium_annual": 2156.00,
+      "endorsements": ["water_backup", "identity_theft", "scheduled_jewelry_3500"]
+    },
+    "POL-PA-2024-002": {
+      "id": "POL-PA-2024-002",
+      "client_id": "CLI-1002",
+      "type": "personal_auto",
+      "carrier": "Westfield Insurance",
+      "carrier_id": "CARRIER-WF",
+      "policy_number": "WF-PA-3391204",
+      "effective_date": "2024-08-01",
+      "expiration_date": "2025-08-01",
+      "status": "active",
+      "vehicles": [
+        {
+          "year": 2023, "make": "Subaru", "model": "Outback", "vin": "4S4BTACC7N3123456",
+          "coverage": {
+            "liability": {"bi_per_person": 250000, "bi_per_accident": 500000, "pd": 100000},
+            "collision": {"deductible": 500},
+            "comprehensive": {"deductible": 250},
+            "uninsured_motorist": {"bi_per_person": 250000, "bi_per_accident": 500000},
+            "medical_payments": 5000
+          }
+        }
+      ],
+      "premium_annual": 1523.00,
+      "payment_plan": "semi_annual",
+      "drivers": [
+        {"name": "Karen Pflug", "license": "NE-B23456789", "dob": "1972-11-08", "relation": "insured"}
+      ]
+    },
+    "POL-HO-2024-002": {
+      "id": "POL-HO-2024-002",
+      "client_id": "CLI-1002",
+      "type": "homeowners",
+      "carrier": "Auto-Owners Insurance",
+      "carrier_id": "CARRIER-AO",
+      "policy_number": "AO-HO-5567234",
+      "effective_date": "2024-05-01",
+      "expiration_date": "2025-05-01",
+      "status": "active",
+      "property": {
+        "address": "1205 S 90th St, Lincoln, NE 68520",
+        "year_built": 1995, "sqft": 1800, "construction": "frame",
+        "roof_type": "architectural_shingle", "roof_year": 2021
+      },
+      "coverage": {
+        "dwelling": 285000, "other_structures": 28500, "personal_property": 142500,
+        "loss_of_use": 57000, "personal_liability": 500000, "medical_payments": 5000,
+        "deductible": 1000, "wind_hail_deductible": "1_percent"
+      },
+      "premium_annual": 1834.00,
+      "endorsements": ["water_backup"]
+    },
+    "POL-UMB-2024-001": {
+      "id": "POL-UMB-2024-001",
+      "client_id": "CLI-1002",
+      "type": "umbrella",
+      "carrier": "Auto-Owners Insurance",
+      "carrier_id": "CARRIER-AO",
+      "policy_number": "AO-UMB-7789012",
+      "effective_date": "2024-05-01",
+      "expiration_date": "2025-05-01",
+      "status": "active",
+      "coverage": {
+        "limit": 1000000
+      },
+      "premium_annual": 287.00
+    },
+    "POL-CA-2024-001": {
+      "id": "POL-CA-2024-001",
+      "client_id": "CLI-1003",
+      "type": "commercial_auto",
+      "carrier": "EMC Insurance (EMCASCO)",
+      "carrier_id": "CARRIER-EMC",
+      "policy_number": "EMC-CA-BZ-224891",
+      "effective_date": "2024-01-01",
+      "expiration_date": "2025-01-01",
+      "status": "active",
+      "vehicles_count": 22,
+      "coverage": {
+        "liability": {"csl": 1000000},
+        "collision": {"deductible": 1000},
+        "comprehensive": {"deductible": 1000},
+        "uninsured_motorist": {"csl": 1000000},
+        "hired_auto": true,
+        "non_owned_auto": true
+      },
+      "premium_annual": 38450.00
+    },
+    "POL-FR-2024-001": {
+      "id": "POL-FR-2024-001",
+      "client_id": "CLI-1004",
+      "type": "farm_ranch",
+      "carrier": "Grinnell Mutual",
+      "carrier_id": "CARRIER-GRIN",
+      "policy_number": "GM-FR-NE-445672",
+      "effective_date": "2024-03-01",
+      "expiration_date": "2025-03-01",
+      "status": "active",
+      "property": {
+        "address": "Rural Route 2, Box 44, York, NE 68467",
+        "acreage": 640,
+        "dwelling_value": 280000,
+        "barn_value": 120000,
+        "grain_bins": [
+          {"capacity_bushels": 30000, "value": 45000, "year": 2015},
+          {"capacity_bushels": 30000, "value": 45000, "year": 2015},
+          {"capacity_bushels": 20000, "value": 52000, "year": 2023}
+        ],
+        "machinery_scheduled": 385000,
+        "livestock": {"type": "beef_cattle", "head_count": 180, "value": 324000}
+      },
+      "coverage": {
+        "dwelling": 280000, "farm_structures": 262000, "farm_personal_property": 385000,
+        "livestock": 324000, "liability": 500000, "deductible": 2500
+      },
+      "premium_annual": 6840.00
+    },
+    "POL-PA-2024-003": {
+      "id": "POL-PA-2024-003",
+      "client_id": "CLI-1004",
+      "type": "personal_auto",
+      "carrier": "Grinnell Mutual",
+      "carrier_id": "CARRIER-GRIN",
+      "policy_number": "GM-PA-NE-445673",
+      "effective_date": "2024-03-01",
+      "expiration_date": "2025-03-01",
+      "status": "active",
+      "vehicles": [
+        {
+          "year": 2020, "make": "Chevrolet", "model": "Silverado 1500", "vin": "3GCUYDED4LG123456",
+          "coverage": {
+            "liability": {"bi_per_person": 100000, "bi_per_accident": 300000, "pd": 100000},
+            "collision": {"deductible": 500},
+            "comprehensive": {"deductible": 250},
+            "uninsured_motorist": {"bi_per_person": 100000, "bi_per_accident": 300000},
+            "medical_payments": 5000
+          }
+        }
+      ],
+      "premium_annual": 1456.00,
+      "payment_plan": "annual",
+      "drivers": [
+        {"name": "Jim Schroeder", "license": "NE-C34567890", "dob": "1962-07-14", "relation": "insured"},
+        {"name": "Nancy Schroeder", "license": "NE-C34567891", "dob": "1964-01-29", "relation": "spouse"}
+      ]
+    },
+    "POL-PA-2024-004": {
+      "id": "POL-PA-2024-004",
+      "client_id": "CLI-1006",
+      "type": "personal_auto",
+      "carrier": "Auto-Owners Insurance",
+      "carrier_id": "CARRIER-AO",
+      "policy_number": "AO-PA-9912345",
+      "effective_date": "2024-09-01",
+      "expiration_date": "2025-09-01",
+      "status": "active",
+      "vehicles": [
+        {
+          "year": 2024, "make": "Honda", "model": "Civic Sport", "vin": "2HGFE2F54RH123456",
+          "coverage": {
+            "liability": {"bi_per_person": 100000, "bi_per_accident": 300000, "pd": 100000},
+            "collision": {"deductible": 500},
+            "comprehensive": {"deductible": 250},
+            "uninsured_motorist": {"bi_per_person": 100000, "bi_per_accident": 300000},
+            "medical_payments": 5000
+          }
+        }
+      ],
+      "premium_annual": 1289.00,
+      "payment_plan": "monthly",
+      "drivers": [
+        {"name": "Miguel Torres", "license": "NE-D45678901", "dob": "1984-06-12", "relation": "insured"}
+      ]
+    },
+    "POL-REN-2024-001": {
+      "id": "POL-REN-2024-001",
+      "client_id": "CLI-1006",
+      "type": "renters",
+      "carrier": "Auto-Owners Insurance",
+      "carrier_id": "CARRIER-AO",
+      "policy_number": "AO-REN-3345678",
+      "effective_date": "2024-09-01",
+      "expiration_date": "2025-09-01",
+      "status": "active",
+      "coverage": {
+        "personal_property": 30000, "personal_liability": 100000,
+        "medical_payments": 1000, "deductible": 500
+      },
+      "premium_annual": 189.00
+    },
+    "POL-CA-2024-002": {
+      "id": "POL-CA-2024-002",
+      "client_id": "CLI-1007",
+      "type": "commercial_auto",
+      "carrier": "EMC Insurance (EMCASCO)",
+      "carrier_id": "CARRIER-EMC",
+      "policy_number": "EMC-CA-BZ-331205",
+      "effective_date": "2024-04-01",
+      "expiration_date": "2025-04-01",
+      "status": "active",
+      "vehicles_count": 14,
+      "coverage": {
+        "liability": {"csl": 1000000},
+        "collision": {"deductible": 2500},
+        "comprehensive": {"deductible": 2500},
+        "uninsured_motorist": {"csl": 1000000},
+        "hired_auto": true, "non_owned_auto": true
+      },
+      "premium_annual": 67200.00
+    },
+    "POL-MTC-2024-001": {
+      "id": "POL-MTC-2024-001",
+      "client_id": "CLI-1007",
+      "type": "motor_truck_cargo",
+      "carrier": "EMC Insurance (EMCASCO)",
+      "carrier_id": "CARRIER-EMC",
+      "policy_number": "EMC-MTC-441298",
+      "effective_date": "2024-04-01",
+      "expiration_date": "2025-04-01",
+      "status": "active",
+      "coverage": {
+        "cargo_limit": 250000, "deductible": 1000
+      },
+      "premium_annual": 4200.00
+    },
+    "POL-PA-2024-005": {
+      "id": "POL-PA-2024-005",
+      "client_id": "CLI-1008",
+      "type": "personal_auto",
+      "carrier": "Westfield Insurance",
+      "carrier_id": "CARRIER-WF",
+      "policy_number": "WF-PA-4412876",
+      "effective_date": "2024-02-01",
+      "expiration_date": "2025-02-01",
+      "status": "active",
+      "vehicles": [
+        {
+          "year": 2021, "make": "Toyota", "model": "RAV4", "vin": "2T3P1RFV0MW123456",
+          "coverage": {
+            "liability": {"bi_per_person": 100000, "bi_per_accident": 300000, "pd": 100000},
+            "collision": {"deductible": 500},
+            "comprehensive": {"deductible": 250},
+            "uninsured_motorist": {"bi_per_person": 100000, "bi_per_accident": 300000},
+            "medical_payments": 5000
+          }
+        }
+      ],
+      "premium_annual": 1345.00,
+      "payment_plan": "monthly",
+      "drivers": [
+        {"name": "Linda Sorensen", "license": "NE-E56789012", "dob": "1969-09-17", "relation": "insured"}
+      ]
+    },
+    "POL-HO-2024-003": {
+      "id": "POL-HO-2024-003",
+      "client_id": "CLI-1008",
+      "type": "homeowners",
+      "carrier": "Westfield Insurance",
+      "carrier_id": "CARRIER-WF",
+      "policy_number": "WF-HO-4412877",
+      "effective_date": "2024-02-01",
+      "expiration_date": "2025-02-01",
+      "status": "active",
+      "property": {
+        "address": "912 W 4th St, Grand Island, NE 68801",
+        "year_built": 1982, "sqft": 1650, "construction": "frame",
+        "roof_type": "architectural_shingle", "roof_year": 2019
+      },
+      "coverage": {
+        "dwelling": 225000, "other_structures": 22500, "personal_property": 112500,
+        "loss_of_use": 45000, "personal_liability": 300000, "medical_payments": 5000,
+        "deductible": 1000, "wind_hail_deductible": "2_percent"
+      },
+      "premium_annual": 1678.00,
+      "endorsements": ["water_backup"]
+    },
+    "POL-CP-2024-001": {
+      "id": "POL-CP-2024-001",
+      "client_id": "CLI-1009",
+      "type": "commercial_property",
+      "carrier": "Erie Insurance",
+      "carrier_id": "CARRIER-ERIE",
+      "policy_number": "ERIE-CP-R887234",
+      "effective_date": "2024-01-01",
+      "expiration_date": "2025-01-01",
+      "status": "active",
+      "coverage": {
+        "building": 15000000, "business_personal_property": 2000000,
+        "business_income": 1000000, "deductible": 5000
+      },
+      "premium_annual": 34500.00
+    },
+    "POL-PA-2024-006": {
+      "id": "POL-PA-2024-006",
+      "client_id": "CLI-1010",
+      "type": "personal_auto",
+      "carrier": "Auto-Owners Insurance",
+      "carrier_id": "CARRIER-AO",
+      "policy_number": "AO-PA-7723456",
+      "effective_date": "2024-05-01",
+      "expiration_date": "2025-05-01",
+      "status": "active",
+      "vehicles": [
+        {
+          "year": 2022, "make": "Hyundai", "model": "Tucson", "vin": "5NMJFDAE8NH123456",
+          "coverage": {
+            "liability": {"bi_per_person": 100000, "bi_per_accident": 300000, "pd": 100000},
+            "collision": {"deductible": 500},
+            "comprehensive": {"deductible": 250},
+            "uninsured_motorist": {"bi_per_person": 100000, "bi_per_accident": 300000},
+            "medical_payments": 5000
+          }
+        }
+      ],
+      "premium_annual": 1412.00,
+      "payment_plan": "monthly",
+      "drivers": [
+        {"name": "Brett Christensen", "license": "NE-F67890123", "dob": "1980-12-03", "relation": "insured"},
+        {"name": "Amy Christensen", "license": "NE-F67890124", "dob": "1982-04-18", "relation": "spouse"}
+      ]
+    },
+    "POL-HO-2024-004": {
+      "id": "POL-HO-2024-004",
+      "client_id": "CLI-1010",
+      "type": "homeowners",
+      "carrier": "Erie Insurance",
+      "carrier_id": "CARRIER-ERIE",
+      "policy_number": "ERIE-HO-R556789",
+      "effective_date": "2024-05-01",
+      "expiration_date": "2025-05-01",
+      "status": "active",
+      "property": {
+        "address": "2100 Pioneers Blvd, Lincoln, NE 68502",
+        "year_built": 2005, "sqft": 2800, "construction": "frame",
+        "roof_type": "architectural_shingle", "roof_year": 2020
+      },
+      "coverage": {
+        "dwelling": 410000, "other_structures": 41000, "personal_property": 205000,
+        "loss_of_use": 82000, "personal_liability": 300000, "medical_payments": 5000,
+        "deductible": 1000, "wind_hail_deductible": "2_percent"
+      },
+      "premium_annual": 2345.00,
+      "endorsements": ["water_backup", "equipment_breakdown"]
+    }
+  }
+}
