@@ -782,15 +782,85 @@ body {
    RESPONSIVE
    ══════════════════════════════════════════════════════════════ */
 
+/* ── Tablet ── */
 @media (max-width: 1200px) {
     .processing-columns { grid-template-columns: 1fr 1fr; }
     .col-transparency { display: none; }
+    .submission-columns { grid-template-columns: 1fr; }
 }
 
+/* ── Small tablet / large phone ── */
 @media (max-width: 900px) {
     .dashboard-main { grid-template-columns: 1fr; }
     .stats-row { grid-template-columns: repeat(2, 1fr); }
     .header-center { display: none; }
+    .header-org { display: none; }
+    .processing-columns { grid-template-columns: 1fr; }
+    .col-email, .col-extraction, .col-transparency {
+        max-height: none; border-right: none; border-left: none;
+        border-bottom: 1px solid var(--border-light);
+    }
+    .action-bar { flex-direction: column; gap: 8px; }
+    .action-bar-left, .action-bar-right { width: 100%; justify-content: stretch; }
+    .action-bar-left .btn, .action-bar-right .btn { flex: 1; justify-content: center; }
+}
+
+/* ── Phone ── */
+@media (max-width: 600px) {
+    .app-header { padding: 0 12px; height: 56px; }
+    .logo { gap: 8px; }
+    .logo-mark svg { width: 28px; height: 28px; }
+    .logo-title { font-size: 15px; }
+    .logo-subtitle { font-size: 9px; }
+    .header-avatar { width: 28px; height: 28px; font-size: 10px; }
+
+    .stats-row { grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; }
+    .stat-card { padding: 12px; gap: 10px; }
+    .stat-icon { width: 36px; height: 36px; }
+    .stat-icon svg { width: 18px; height: 18px; }
+    .stat-value { font-size: 20px; }
+    .stat-label { font-size: 10px; }
+
+    .dashboard-main { padding: 12px; gap: 12px; }
+    .section-desc { font-size: 12px; }
+
+    .email-card { padding: 10px 12px; gap: 8px; }
+    .email-avatar { width: 34px; height: 34px; font-size: 11px; }
+    .email-sender { font-size: 12px; }
+    .email-subject-line { font-size: 12px; }
+    .email-preview { font-size: 11px; }
+    .email-type-badge { font-size: 9px; padding: 1px 6px; }
+
+    .processing-topbar { padding: 10px 12px; flex-wrap: wrap; gap: 6px; }
+    .topbar-title { font-size: 14px; }
+    .topbar-center { flex-direction: column; align-items: flex-start; gap: 4px; }
+    .topbar-badges { flex-wrap: wrap; }
+
+    .col-email, .col-extraction, .col-transparency { padding: 12px; }
+    .form-row { flex-direction: column; gap: 12px; }
+
+    .action-bar { padding: 10px 12px; }
+    .btn-lg { padding: 10px 14px; font-size: 13px; }
+
+    .chat-panel { width: calc(100vw - 24px); right: 12px; bottom: 12px; }
+    .chat-body { height: 360px; }
+
+    .submission-columns { padding: 12px; gap: 12px; }
+    .submission-textarea { font-size: 11px; padding: 10px; }
+
+    .app-footer { padding: 12px; font-size: 11px; gap: 6px; flex-wrap: wrap; justify-content: center; }
+
+    .modal-dialog { width: 95%; max-height: 90vh; }
+    .modal-body { padding: 14px; }
+
+    .missing-warning { font-size: 11px; padding: 4px 8px; }
+}
+
+/* ── Very small phone ── */
+@media (max-width: 380px) {
+    .stats-row { grid-template-columns: 1fr; }
+    .email-card-right { display: none; }
+    .logo-subtitle { display: none; }
 }
 
 /* Scrollbar styling */
