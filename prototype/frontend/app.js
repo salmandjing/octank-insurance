@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════
    ClaimFlow AI — Frontend Application
-   Nebraska Insurance FNOL Automation
+   Nebraska Insurance FNOL Automation — Premium SaaS Demo
    ═══════════════════════════════════════════════════════════════════ */
 
 const API_BASE = '';
@@ -22,6 +22,16 @@ function showScreen(screenId) {
     }
 }
 
+function showDashboardView() {
+    document.querySelectorAll('.nav-tab').forEach(function (t) { t.classList.remove('nav-active'); });
+    document.querySelector('[data-view="dashboard"]').classList.add('nav-active');
+}
+
+function showClaimsView() {
+    document.querySelectorAll('.nav-tab').forEach(function (t) { t.classList.remove('nav-active'); });
+    document.querySelector('[data-view="claims"]').classList.add('nav-active');
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    DASHBOARD
    ═══════════════════════════════════════════════════════════════════ */
@@ -31,78 +41,81 @@ async function loadDashboard() {
         var res = await fetch(API_BASE + '/api/claims');
         var data = await res.json();
         claimsData = data.claims || [];
-        renderClaimsQueue();
-        updateStats();
     } catch (e) {
         console.warn('Could not load claims:', e.message);
         claimsData = [];
-        renderClaimsQueue();
-        updateStats();
     }
+    renderClaimsQueue();
+    updateStats();
 }
 
 function renderClaimsQueue() {
-    var tbody = document.getElementById('claims-queue-body');
-    if (!tbody) return;
+    var container = document.getElementById('claims-queue');
+    var countEl = document.getElementById('queue-count');
+    if (!container) return;
+
+    if (countEl) {
+        countEl.textContent = claimsData.length + ' claim' + (claimsData.length !== 1 ? 's' : '');
+    }
 
     if (!claimsData.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No claims yet. Use a demo scenario to get started.</td></tr>';
+        container.innerHTML =
+            '<div class="empty-state">' +
+            '<svg width="48" height="48" viewBox="0 0 48 48" fill="none"><rect x="8" y="6" width="32" height="36" rx="4" stroke="#C5CDD8" stroke-width="1.5"/><path d="M16 16h16M16 22h16M16 28h10" stroke="#C5CDD8" stroke-width="1.5" stroke-linecap="round"/></svg>' +
+            '<p>No claims processed yet</p>' +
+            '<span>Click an incoming email to get started</span>' +
+            '</div>';
         return;
     }
 
-    tbody.innerHTML = claimsData.map(function (c) {
-        var statusHtml = '<span class="status-badge status-' + escapeHtml(c.status || '') + '">' + formatStatus(c.status) + '</span>';
-        var priorityHtml = '<span class="priority-badge priority-' + escapeHtml(c.priority || 'normal') + '">' + escapeHtml(c.priority || 'normal') + '</span>';
-        var confidenceHtml = renderConfidence(c.confidence);
+    container.innerHTML = claimsData.map(function (c) {
+        var statusText = formatStatus(c.status);
         var timeStr = formatTime(c.created_at);
-        var fromStr = escapeHtml(c.email_from || 'N/A');
-        var subjectStr = escapeHtml(c.email_subject || 'N/A');
-        var lossStr = formatLossType(c.loss_type);
 
-        return '<tr onclick="openClaim(\'' + escapeHtml(c.claim_id) + '\')" class="claim-row">' +
-            '<td>' + statusHtml + '</td>' +
-            '<td>' + fromStr + '</td>' +
-            '<td>' + subjectStr + '</td>' +
-            '<td>' + priorityHtml + '</td>' +
-            '<td>' + escapeHtml(lossStr) + '</td>' +
-            '<td>' + confidenceHtml + '</td>' +
-            '<td>' + escapeHtml(timeStr) + '</td>' +
-            '</tr>';
+        return '<div class="claim-queue-item" onclick="openClaim(\'' + escapeHtml(c.claim_id) + '\')">' +
+            '<div class="claim-status-dot dot-' + escapeHtml(c.status || 'new') + '"></div>' +
+            '<div class="claim-queue-info">' +
+            '<div class="claim-queue-name">' + escapeHtml(c.reporter_name || c.email_from || 'Unknown') + '</div>' +
+            '<div class="claim-queue-subject">' + escapeHtml(c.email_subject || 'No subject') + '</div>' +
+            '</div>' +
+            '<div class="claim-queue-meta">' +
+            '<span class="claim-queue-status status-' + escapeHtml(c.status || 'new') + '">' + escapeHtml(statusText) + '</span>' +
+            '<span class="claim-queue-time">' + escapeHtml(timeStr) + '</span>' +
+            '</div>' +
+            '</div>';
     }).join('');
 }
 
 function updateStats() {
     var todayEl = document.getElementById('stat-today');
     var pendingEl = document.getElementById('stat-pending');
-    var submittedEl = document.getElementById('stat-submitted');
     var avgTimeEl = document.getElementById('stat-avg-time');
 
-    if (todayEl) todayEl.textContent = claimsData.length;
+    if (todayEl) animateCounter(todayEl, claimsData.length);
     if (pendingEl) {
-        pendingEl.textContent = claimsData.filter(function (c) {
-            return c.status === 'needs_review';
-        }).length;
-    }
-    if (submittedEl) {
-        submittedEl.textContent = claimsData.filter(function (c) {
-            return c.status === 'submitted';
-        }).length;
+        var pending = claimsData.filter(function (c) { return c.status === 'needs_review'; }).length;
+        animateCounter(pendingEl, pending);
     }
     if (avgTimeEl) {
         if (claimsData.length > 0) {
-            var totalMs = claimsData.reduce(function (sum, c) {
-                return sum + (c.processing_time_ms || 0);
-            }, 0);
+            var totalMs = claimsData.reduce(function (sum, c) { return sum + (c.processing_time_ms || 0); }, 0);
             var avgMs = totalMs / claimsData.length;
-            if (avgMs > 0) {
-                avgTimeEl.textContent = (avgMs / 1000).toFixed(1) + 's';
-            } else {
-                avgTimeEl.textContent = '--';
-            }
+            avgTimeEl.textContent = avgMs > 0 ? (avgMs / 1000).toFixed(1) + 's' : '< 1s';
         } else {
             avgTimeEl.textContent = '--';
         }
     }
+}
+
+function animateCounter(el, target) {
+    var current = parseInt(el.textContent) || 0;
+    if (current === target) return;
+    var step = target > current ? 1 : -1;
+    var interval = setInterval(function () {
+        current += step;
+        el.textContent = current;
+        if (current === target) clearInterval(interval);
+    }, 50);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -110,12 +123,25 @@ function updateStats() {
    ═══════════════════════════════════════════════════════════════════ */
 
 async function runScenario(name) {
-    showLoading('Processing email...');
+    showLoading('Receiving email...');
+    addActivity('Incoming email received', 'blue');
+
     try {
+        // Animate pipeline steps
+        setTimeout(function () { advanceLoadingStep(2); updateLoadingText('AI analyzing email...'); }, 600);
+        setTimeout(function () { addActivity('AI parsing and extracting FNOL data', 'amber'); }, 800);
+
         var res = await fetch(API_BASE + '/api/demo/scenario/' + encodeURIComponent(name), {
             method: 'POST'
         });
         var data = await res.json();
+
+        advanceLoadingStep(3);
+        updateLoadingText('Extraction complete!');
+        addActivity('FNOL extraction complete — ' + formatLossType(data.extraction && data.extraction.loss_type || ''), 'green');
+
+        await new Promise(function (r) { setTimeout(r, 500); });
+
         if (data.claim_id) {
             await loadDashboard();
             openClaim(data.claim_id);
@@ -143,13 +169,17 @@ async function openClaim(claimId) {
         renderClaimProcessing(claim);
         showScreen('claim-processing');
     } catch (e) {
-        showToast('Error loading claim', 'error');
+        showToast('Error loading claim: ' + e.message, 'error');
     } finally {
         hideLoading();
     }
 }
 
 function renderClaimProcessing(claim) {
+    // Claim ID badge
+    var idBadge = document.getElementById('claim-id-badge');
+    if (idBadge) idBadge.textContent = claim.claim_id || '';
+
     // Left panel: Original email
     setTextContent('email-from', claim.email_from || '');
     setTextContent('email-subject', claim.email_subject || '');
@@ -166,18 +196,15 @@ function renderClaimProcessing(claim) {
         if (el) el.value = ext[f] || '';
     });
 
-    // Dropdowns
     var lossType = document.getElementById('field-loss_type');
     if (lossType) lossType.value = ext.loss_type || 'unknown';
 
-    // Checkboxes
     var injuries = document.getElementById('field-injuries');
     if (injuries) injuries.checked = ext.injuries || false;
 
     var policeReport = document.getElementById('field-police_report');
     if (policeReport) policeReport.checked = ext.police_report || false;
 
-    // Other parties
     var op = document.getElementById('field-other_parties');
     if (op) {
         if (ext.other_parties && typeof ext.other_parties === 'object') {
@@ -211,13 +238,9 @@ function renderClaimProcessing(claim) {
         dot.classList.remove('dot-high', 'dot-medium', 'dot-low');
         if (score !== undefined && score !== null) {
             var pct = Math.round(score * 100);
-            if (pct >= 80) {
-                dot.classList.add('dot-high');
-            } else if (pct >= 50) {
-                dot.classList.add('dot-medium');
-            } else {
-                dot.classList.add('dot-low');
-            }
+            if (pct >= 80) dot.classList.add('dot-high');
+            else if (pct >= 50) dot.classList.add('dot-medium');
+            else dot.classList.add('dot-low');
             dot.title = 'Confidence: ' + pct + '%';
         } else {
             dot.title = 'Field confidence';
@@ -229,7 +252,9 @@ function renderClaimProcessing(claim) {
     var missingEl = document.getElementById('missing-fields');
     if (missingEl) {
         if (missing.length) {
-            missingEl.innerHTML = '<div class="missing-warning">Missing: ' + escapeHtml(missing.join(', ')) + '</div>';
+            missingEl.innerHTML = '<div class="missing-warning">' +
+                '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1L1 12h12L7 1z" stroke="currentColor" stroke-width="1.5"/><path d="M7 5.5v3M7 10v.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>' +
+                'Missing: ' + escapeHtml(missing.join(', ')) + '</div>';
             missingEl.style.display = 'block';
         } else {
             missingEl.style.display = 'none';
@@ -280,27 +305,18 @@ function renderTraceSteps(steps) {
         return;
     }
 
-    container.innerHTML = steps.map(function (step) {
+    container.innerHTML = steps.map(function (step, i) {
         var statusClass = step.status || 'success';
-        var statusIcon;
-        if (step.status === 'success') {
-            statusIcon = '&#10003;';
-        } else if (step.status === 'error') {
-            statusIcon = '&#10007;';
-        } else {
-            statusIcon = '&#9888;';
-        }
-
+        var icon = getTraceIcon(step.step_type || step.name, statusClass);
         var detailsHtml = '';
         if (step.details) {
             detailsHtml = '<div class="trace-details">' + formatTraceDetails(step.details) + '</div>';
         }
-
         var durationStr = step.duration_ms ? step.duration_ms + 'ms' : '';
 
-        return '<div class="trace-step trace-' + escapeHtml(statusClass) + '">' +
+        return '<div class="trace-step trace-' + escapeHtml(statusClass) + '" style="animation-delay:' + (i * 0.1) + 's">' +
             '<div class="trace-header">' +
-            '<span class="trace-icon">' + statusIcon + '</span>' +
+            '<span class="trace-icon">' + icon + '</span>' +
             '<span class="trace-name">' + escapeHtml(step.name || '') + '</span>' +
             '<span class="trace-time">' + escapeHtml(durationStr) + '</span>' +
             '</div>' +
@@ -309,11 +325,18 @@ function renderTraceSteps(steps) {
     }).join('');
 }
 
+function getTraceIcon(type, status) {
+    if (status === 'error') return '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke="#C4342D" stroke-width="1.5" stroke-linecap="round"/></svg>';
+    if (status === 'warning') return '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2L1 10h10L6 2z" stroke="#D4930D" stroke-width="1" fill="none"/><path d="M6 5v2.5M6 9v.01" stroke="#D4930D" stroke-width="1" stroke-linecap="round"/></svg>';
+    return '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 6l2 2 4-4" stroke="#2D8A4E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+
 function formatTraceDetails(details) {
     return Object.entries(details).map(function (entry) {
         var k = entry[0];
         var v = entry[1];
         var val = (typeof v === 'object') ? JSON.stringify(v) : String(v);
+        if (val.length > 80) val = val.substring(0, 77) + '...';
         return '<span class="trace-detail"><strong>' + escapeHtml(k) + ':</strong> ' + escapeHtml(val) + '</span>';
     }).join(' ');
 }
@@ -325,9 +348,9 @@ function formatTraceDetails(details) {
 async function approveClaim() {
     if (!currentClaimId) return;
     showLoading('Generating carrier submission and client email...');
+    addActivity('Generating carrier submission for ' + currentClaimId, 'blue');
 
     var extraction = collectFormData();
-
     try {
         var res = await fetch(API_BASE + '/api/claims/' + encodeURIComponent(currentClaimId) + '/approve', {
             method: 'POST',
@@ -337,6 +360,7 @@ async function approveClaim() {
         var data = await res.json();
         renderSubmissionPreview(data);
         showScreen('submission-preview');
+        addActivity('Submission documents generated', 'green');
     } catch (e) {
         showToast('Error generating submission: ' + e.message, 'error');
     } finally {
@@ -382,7 +406,6 @@ function renderSubmissionPreview(data) {
     if (clientTo) clientTo.textContent = data.client_email_to || '';
     if (clientSubject) clientSubject.textContent = data.client_email_subject || '';
 
-    // Reset success state
     var successEl = document.getElementById('submit-success');
     if (successEl) successEl.style.display = 'none';
     var submitBtn = document.getElementById('btn-submit-carrier');
@@ -402,6 +425,7 @@ async function submitToCarrier() {
         });
         var data = await res.json();
         showToast(data.message || 'Claim submitted!', 'success');
+        addActivity('Claim ' + currentClaimId + ' submitted to carrier', 'green');
 
         var successEl = document.getElementById('submit-success');
         if (successEl) successEl.style.display = 'flex';
@@ -418,7 +442,7 @@ async function submitToCarrier() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   FOLLOW-UP EMAIL
+   FOLLOW-UP, DRAFT, ESCALATE
    ═══════════════════════════════════════════════════════════════════ */
 
 async function generateFollowup() {
@@ -434,9 +458,10 @@ async function generateFollowup() {
                 '<p><strong>To:</strong> ' + escapeHtml(data.to || '') + '</p>' +
                 '<p><strong>Subject:</strong> ' + escapeHtml(data.subject || '') + '</p>' +
                 '<p><strong>Missing Fields:</strong> ' + escapeHtml((data.missing_fields || []).join(', ')) + '</p>' +
-                '<hr>' +
-                '<pre style="white-space:pre-wrap;font-family:inherit;">' + escapeHtml(data.followup_email) + '</pre>'
+                '<hr style="border:none;border-top:1px solid #E2E6ED;margin:12px 0;">' +
+                '<pre style="white-space:pre-wrap;font-family:Inter,sans-serif;font-size:13px;line-height:1.6;">' + escapeHtml(data.followup_email) + '</pre>'
             );
+            addActivity('Follow-up email generated for ' + currentClaimId, 'amber');
         } else {
             showToast('No follow-up email generated.', 'warning');
         }
@@ -446,10 +471,6 @@ async function generateFollowup() {
         hideLoading();
     }
 }
-
-/* ═══════════════════════════════════════════════════════════════════
-   SAVE DRAFT & ESCALATE
-   ═══════════════════════════════════════════════════════════════════ */
 
 async function saveDraft() {
     if (!currentClaimId) return;
@@ -462,7 +483,8 @@ async function saveDraft() {
             body: JSON.stringify({ extraction: extraction })
         });
         await res.json();
-        showToast('Draft saved.', 'success');
+        showToast('Draft saved successfully.', 'success');
+        addActivity('Draft saved for ' + currentClaimId, 'blue');
     } catch (e) {
         showToast('Error saving draft: ' + e.message, 'error');
     } finally {
@@ -472,7 +494,7 @@ async function saveDraft() {
 
 async function escalateClaim() {
     if (!currentClaimId) return;
-    if (!confirm('Escalate this claim to a senior adjuster? This action cannot be undone.')) return;
+    if (!confirm('Escalate this claim to a senior adjuster?')) return;
     showLoading('Escalating claim...');
     try {
         var res = await fetch(API_BASE + '/api/claims/' + encodeURIComponent(currentClaimId) + '/escalate', {
@@ -480,6 +502,7 @@ async function escalateClaim() {
         });
         var data = await res.json();
         showToast(data.message || 'Claim escalated.', 'warning');
+        addActivity('Claim ' + currentClaimId + ' escalated', 'red');
         await loadDashboard();
         showScreen('dashboard');
     } catch (e) {
@@ -517,6 +540,15 @@ async function initChatSession() {
     }
 }
 
+function sendSuggestion(text) {
+    var input = document.getElementById('chat-input');
+    if (input) input.value = text;
+    // Hide suggestions after click
+    var suggestions = document.getElementById('chat-suggestions');
+    if (suggestions) suggestions.style.display = 'none';
+    sendChatMessage();
+}
+
 async function sendChatMessage() {
     var input = document.getElementById('chat-input');
     if (!input) return;
@@ -526,6 +558,10 @@ async function sendChatMessage() {
     addChatBubble(msg, 'user');
     input.value = '';
 
+    // Hide suggestions after first message
+    var suggestions = document.getElementById('chat-suggestions');
+    if (suggestions) suggestions.style.display = 'none';
+
     if (!chatSessionId) {
         await initChatSession();
     }
@@ -534,6 +570,9 @@ async function sendChatMessage() {
         addChatBubble('Sorry, I could not connect to the server. Please try again.', 'assistant');
         return;
     }
+
+    // Show typing indicator
+    showTypingIndicator();
 
     try {
         var res = await fetch(API_BASE + '/api/chat', {
@@ -545,8 +584,10 @@ async function sendChatMessage() {
             })
         });
         var data = await res.json();
+        hideTypingIndicator();
         addChatBubble(data.response || 'No response received.', 'assistant');
     } catch (e) {
+        hideTypingIndicator();
         addChatBubble('Sorry, I encountered an error. Please try again.', 'assistant');
     }
 }
@@ -554,11 +595,73 @@ async function sendChatMessage() {
 function addChatBubble(text, role) {
     var container = document.getElementById('chat-messages');
     if (!container) return;
+
     var bubble = document.createElement('div');
     bubble.className = 'chat-bubble chat-' + role;
-    bubble.textContent = text;
+
+    if (role === 'assistant') {
+        bubble.innerHTML =
+            '<div class="chat-bubble-avatar">' +
+            '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1a6 6 0 100 12A6 6 0 007 1z" stroke="currentColor" stroke-width="1"/><path d="M4.5 6h.01M9.5 6h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M5 9c.4.6 1 1 2 1s1.6-.4 2-1" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>' +
+            '</div>' +
+            '<div class="chat-bubble-content">' + escapeHtml(text) + '</div>';
+    } else {
+        bubble.innerHTML = '<div class="chat-bubble-content">' + escapeHtml(text) + '</div>';
+    }
+
     container.appendChild(bubble);
     container.scrollTop = container.scrollHeight;
+}
+
+function showTypingIndicator() {
+    var container = document.getElementById('chat-messages');
+    if (!container) return;
+    var typing = document.createElement('div');
+    typing.id = 'typing-indicator';
+    typing.className = 'chat-bubble chat-assistant';
+    typing.innerHTML =
+        '<div class="chat-bubble-avatar">' +
+        '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1a6 6 0 100 12A6 6 0 007 1z" stroke="currentColor" stroke-width="1"/></svg>' +
+        '</div>' +
+        '<div class="chat-typing"><span></span><span></span><span></span></div>';
+    container.appendChild(typing);
+    container.scrollTop = container.scrollHeight;
+}
+
+function hideTypingIndicator() {
+    var el = document.getElementById('typing-indicator');
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ACTIVITY FEED
+   ═══════════════════════════════════════════════════════════════════ */
+
+function addActivity(text, color) {
+    var feed = document.getElementById('activity-feed');
+    if (!feed) return;
+
+    var item = document.createElement('div');
+    item.className = 'activity-item';
+    item.style.animation = 'slideUp 0.3s ease';
+    item.innerHTML =
+        '<div class="activity-dot dot-' + (color || 'blue') + '"></div>' +
+        '<div class="activity-content">' +
+        '<span class="activity-text">' + escapeHtml(text) + '</span>' +
+        '<span class="activity-time">' + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) + '</span>' +
+        '</div>';
+
+    // Insert at top
+    if (feed.firstChild) {
+        feed.insertBefore(item, feed.firstChild);
+    } else {
+        feed.appendChild(item);
+    }
+
+    // Keep max 20 items
+    while (feed.children.length > 20) {
+        feed.removeChild(feed.lastChild);
+    }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -567,29 +670,20 @@ function addChatBubble(text, role) {
 
 function formatStatus(s) {
     var map = {
-        new: 'New',
-        processing: 'Processing',
-        needs_review: 'Needs Review',
-        approved: 'Approved',
-        submitted: 'Submitted',
-        follow_up: 'Follow Up',
-        draft: 'Draft'
+        new: 'New', processing: 'Processing', needs_review: 'Review',
+        approved: 'Approved', submitted: 'Submitted', follow_up: 'Follow Up',
+        draft: 'Draft', escalated: 'Escalated'
     };
     return map[s] || s || 'Unknown';
 }
 
 function formatLossType(t) {
     var map = {
-        auto_collision: 'Auto - Collision',
-        auto_comprehensive: 'Auto - Comprehensive',
-        homeowners_property: 'Homeowners',
-        homeowners_liability: 'Home Liability',
-        commercial_property: 'Commercial Property',
-        commercial_auto: 'Commercial Auto',
-        farm_ranch: 'Farm/Ranch',
-        workers_comp: 'Workers Comp',
-        general_liability: 'General Liability',
-        unknown: 'Unknown'
+        auto_collision: 'Auto - Collision', auto_comprehensive: 'Auto - Comprehensive',
+        homeowners_property: 'Homeowners', homeowners_liability: 'Home Liability',
+        commercial_property: 'Commercial Property', commercial_auto: 'Commercial Auto',
+        farm_ranch: 'Farm/Ranch', workers_comp: 'Workers Comp',
+        general_liability: 'General Liability', unknown: 'Unknown'
     };
     return map[t] || t || '';
 }
@@ -597,10 +691,7 @@ function formatLossType(t) {
 function formatTime(iso) {
     if (!iso) return '';
     try {
-        return new Date(iso).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     } catch (e) {
         return '';
     }
@@ -609,15 +700,8 @@ function formatTime(iso) {
 function renderConfidence(score) {
     if (score === undefined || score === null) return '';
     var pct = Math.round((score || 0) * 100);
-    var cls;
-    if (pct >= 80) {
-        cls = 'high';
-    } else if (pct >= 50) {
-        cls = 'medium';
-    } else {
-        cls = 'low';
-    }
-    return '<span class="confidence confidence-' + cls + '">' + pct + '%</span>';
+    var cls = pct >= 80 ? 'high' : pct >= 50 ? 'medium' : 'low';
+    return '<span class="confidence confidence-' + cls + '">' + pct + '% confidence</span>';
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -626,8 +710,16 @@ function renderConfidence(score) {
 
 function showLoading(msg) {
     var el = document.getElementById('loading-overlay');
-    var textEl = document.getElementById('loading-text');
-    if (textEl) textEl.textContent = msg || 'Processing...';
+    updateLoadingText(msg);
+    // Reset pipeline steps
+    for (var i = 1; i <= 3; i++) {
+        var step = document.getElementById('load-step-' + i);
+        if (step) { step.classList.remove('active', 'done'); }
+    }
+    document.querySelectorAll('.pipeline-connector').forEach(function (c) { c.classList.remove('active'); });
+    var step1 = document.getElementById('load-step-1');
+    if (step1) step1.classList.add('active');
+
     if (el) el.style.display = 'flex';
 }
 
@@ -636,22 +728,43 @@ function hideLoading() {
     if (el) el.style.display = 'none';
 }
 
+function advanceLoadingStep(stepNum) {
+    // Mark previous steps as done
+    for (var i = 1; i < stepNum; i++) {
+        var prev = document.getElementById('load-step-' + i);
+        if (prev) { prev.classList.remove('active'); prev.classList.add('done'); }
+    }
+    // Mark connectors
+    document.querySelectorAll('.pipeline-connector').forEach(function (c, idx) {
+        if (idx < stepNum - 1) c.classList.add('active');
+    });
+    // Activate current step
+    var curr = document.getElementById('load-step-' + stepNum);
+    if (curr) curr.classList.add('active');
+}
+
+function updateLoadingText(msg) {
+    var textEl = document.getElementById('loading-text');
+    if (textEl) textEl.textContent = msg || 'Processing...';
+}
+
 function showToast(message, type) {
     type = type || 'info';
     var container = document.getElementById('toast-container');
     if (!container) return;
 
+    var icon = '';
+    if (type === 'success') icon = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    else if (type === 'error') icon = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    else if (type === 'warning') icon = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 4v5M8 11v.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+
     var toast = document.createElement('div');
     toast.className = 'toast toast-' + type;
-    toast.textContent = message;
+    toast.innerHTML = icon + escapeHtml(message);
     container.appendChild(toast);
 
-    // Trigger the slide-in animation
-    setTimeout(function () {
-        toast.classList.add('show');
-    }, 10);
+    setTimeout(function () { toast.classList.add('show'); }, 10);
 
-    // Auto-dismiss
     setTimeout(function () {
         toast.classList.remove('show');
         setTimeout(function () {
@@ -682,16 +795,12 @@ function setTextContent(id, text) {
 function escapeHtml(str) {
     if (!str) return '';
     var s = String(str);
-    return s
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   WEBSOCKET — Real-time claim updates
+   WEBSOCKET — Real-time updates
    ═══════════════════════════════════════════════════════════════════ */
 
 function connectWebSocket() {
@@ -724,8 +833,8 @@ function connectWebSocket() {
         };
 
         ws.onclose = function () {
-            console.log('WebSocket closed — reconnecting in 3s');
-            setTimeout(connectWebSocket, 3000);
+            console.log('WebSocket closed — reconnecting in 5s');
+            setTimeout(connectWebSocket, 5000);
         };
     } catch (e) {
         console.log('WebSocket not available');
@@ -736,34 +845,22 @@ function appendTraceStep(step) {
     var container = document.getElementById('trace-steps');
     if (!container) return;
 
-    // Remove the "empty" placeholder if present
     var empty = container.querySelector('.trace-empty');
-    if (empty) {
-        container.removeChild(empty);
-    }
+    if (empty) container.removeChild(empty);
 
     var statusClass = step.status || 'success';
-    var statusIcon;
-    if (step.status === 'success') {
-        statusIcon = '&#10003;';
-    } else if (step.status === 'error') {
-        statusIcon = '&#10007;';
-    } else {
-        statusIcon = '&#9888;';
-    }
-
+    var icon = getTraceIcon(step.step_type, statusClass);
     var detailsHtml = '';
     if (step.details) {
         detailsHtml = '<div class="trace-details">' + formatTraceDetails(step.details) + '</div>';
     }
-
     var durationStr = step.duration_ms ? step.duration_ms + 'ms' : '';
 
     var div = document.createElement('div');
     div.className = 'trace-step trace-' + escapeHtml(statusClass);
     div.innerHTML =
         '<div class="trace-header">' +
-        '<span class="trace-icon">' + statusIcon + '</span>' +
+        '<span class="trace-icon">' + icon + '</span>' +
         '<span class="trace-name">' + escapeHtml(step.name || '') + '</span>' +
         '<span class="trace-time">' + escapeHtml(durationStr) + '</span>' +
         '</div>' +
@@ -778,12 +875,16 @@ function appendTraceStep(step) {
    ═══════════════════════════════════════════════════════════════════ */
 
 function handleKeyboardShortcuts(e) {
-    // Escape closes modal
     if (e.key === 'Escape') {
         var modal = document.getElementById('modal-overlay');
         if (modal && modal.style.display !== 'none') {
             closeModal();
             return;
+        }
+        // Close chat if open
+        var panel = document.getElementById('chat-panel');
+        if (panel && panel.classList.contains('open')) {
+            toggleChat();
         }
     }
 }
@@ -793,22 +894,15 @@ function handleKeyboardShortcuts(e) {
    ═══════════════════════════════════════════════════════════════════ */
 
 document.addEventListener('DOMContentLoaded', function () {
-    // Load dashboard data
     loadDashboard();
-
-    // Connect WebSocket for real-time updates
     connectWebSocket();
 
-    // Chat enter key handler
     var chatInput = document.getElementById('chat-input');
     if (chatInput) {
         chatInput.addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                sendChatMessage();
-            }
+            if (e.key === 'Enter') sendChatMessage();
         });
     }
 
-    // Keyboard shortcuts
     document.addEventListener('keydown', handleKeyboardShortcuts);
 });

@@ -11,6 +11,7 @@ from typing import Optional, List, Dict
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from backend.config import BASE_DIR, DOCS_DIR
@@ -55,6 +56,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ClaimFlow AI — FNOL Automation", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 FRONTEND_DIR = BASE_DIR.parent / "frontend"
 
@@ -455,6 +464,30 @@ async def generate_claim_followup(claim_id: str):
         "subject": result.get("subject", ""),
         "missing_fields": missing,
     }
+
+
+@app.post("/api/claims/{claim_id}/draft")
+async def save_claim_draft(claim_id: str, req: ClaimApproveRequest):
+    """Save the current extraction as a draft."""
+    record = claim_pipeline.get_claim(claim_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if req.extraction:
+        record.extraction.update(req.extraction)
+    record.status = "draft"
+    return {"claim_id": claim_id, "status": "draft", "message": "Draft saved."}
+
+
+@app.post("/api/claims/{claim_id}/escalate")
+async def escalate_claim(claim_id: str):
+    """Escalate a claim to a senior adjuster."""
+    record = claim_pipeline.get_claim(claim_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    record.status = "escalated"
+    await _ws_broadcast("claims", {"type": "claim_escalated", "claim_id": claim_id})
+    return {"claim_id": claim_id, "status": "escalated",
+            "message": f"Claim {claim_id} has been escalated to a senior adjuster for review."}
 
 
 # ── Demo Scenarios ───────────────────────────────────────────────────
